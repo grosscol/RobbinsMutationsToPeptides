@@ -51,6 +51,24 @@ digitStringToArray <- function(x){
   unname(ret)
 }
 
+#helper function will be nested inside another mapply
+#make sequence from two lists: exonStart, exonEnd
+startStopToSequence <- function(x,y){
+ as.vector(unlist(mapply(x,y,FUN=seq)))
+
+}
+
+#calculate cDNA position of genomic mutation position.
+#requires lists of genomic positions of exonStarts and exonEnds
+getCDnaPos <- function(mut,exS,exE){
+  #calculate array of exon lengths
+  exonls <- exS - exE
+  print(exonls)
+  
+  return(1)
+  
+} 
+
 ################################################
 ###  Import Data                        #######
 ##############################################
@@ -110,7 +128,7 @@ df.in3$exonends<-unname(sapply(df.in3$exonends, FUN=digitStringToArray))
 
 
 ################################################
-###  Summary of Strings                 #######
+###  Brief Summary of Data              #######
 ##############################################
 
 ### Using data set one ###
@@ -171,6 +189,12 @@ df1.muts<-merge(cbind(df.in2, df2.parsed), df.in1)
 #######################################################
 ###  Parse Mutation Strings. Data Set Two      #######
 #####################################################
+
+#This will construct a sequence as long as the mrna sequence for each transcript
+#However, the values in this will be the genomic position corresponding to the
+#cDNA of the transcript sequence.  Verbose and wasteful.
+d<-mapply(FUN=startStopToSequence,df.in3$exonstarts,df.in3$exonends)
+
 
 
 
