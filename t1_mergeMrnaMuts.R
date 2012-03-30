@@ -55,17 +55,31 @@ library("plyr")
 #Import Directory
 impdir<-'S:/TIL-LAB/Staff/Colin/Projects/MutationsToPeptides/procdata/'
 
+### Data Set One from Dr. Robbins
 #Transcript + mRNA 
 infile<-paste(impdir,'mrna2012-03-26_172605.txt',sep='')
 cls<- c( "character","character" )
-df.mrnas<-read.table(infile, header=TRUE, sep="\t", colClasses=cls, 
+df.in1<-read.table(infile, header=TRUE, sep="\t", colClasses=cls, 
                      comment.char = "#", encoding="UTF-8", stringsAsFactors=FALSE)
 
 #Transcript + mutations 
 infile<-paste(impdir,'muts2012-03-26_172605.txt',sep='')
 cls<- c( "character","character" )
-pgdxmuts<-read.table(infile, header=TRUE, sep="\t", colClasses=cls, 
+df.in2<-read.table(infile, header=TRUE, sep="\t", colClasses=cls, 
                     comment.char = "#", encoding="UTF-8", stringsAsFactors=FALSE)
+
+### Data Set Two from Dr. Robbins
+#Transcript + annotation + mRNA
+infile<-paste(impdir,'supplementarytable3.txt',sep='')
+cls<- c( rep("character", 8) )
+df.in3<-read.table(infile, header=TRUE, sep="\t", colClasses=cls, 
+                     comment.char = "#", encoding="UTF-8", stringsAsFactors=FALSE)
+
+#Transcript + mutations
+infile<-paste(impdir,'supplementarytable3.txt',sep='')
+cls<- c( rep("character", 8) )
+df.in4<-read.table(infile, header=TRUE, sep="\t", colClasses=cls, 
+                   comment.char = "#", encoding="UTF-8", stringsAsFactors=FALSE)
 
 
 ################################################
@@ -73,16 +87,14 @@ pgdxmuts<-read.table(infile, header=TRUE, sep="\t", colClasses=cls,
 ##############################################
 
 #Names of transcripts given vs names of transcripts given were also in UCSC DB
-length(pgdxmuts$Transcript)
-sum(pgdxmuts$Transcript %in% df.mrnas$name)
+length(df.in2$Transcript)
+sum(df.in2$Transcript %in% df.in1$name)
 
 #Number of mutations that occur in the same transcript name
-sum(duplicated(pgdxmuts$Transcript))
+sum(duplicated(df.in2$Transcript))
 
-sapply(pgdxmuts$Transcript, FUN=nchar)
-
-#get bast transcript names (first 8 characters)
-btn<-sapply(pgdxmuts$Transcript, FUN=substr, start=1, stop=8 )
+#get base transcript names (first 8 characters)
+btn<-sapply(df.in2$Transcript, FUN=substr, start=1, stop=8 )
 length(unique(btn))
 sum(duplicated(btn))
 btn[duplicated(btn)]
@@ -98,29 +110,31 @@ regbaseloc <- '^c\\.\\w(\\d+)\\w$' #will always be the last char
 
 #Instead, just use known positional format to get values.
 pgdxparsed<-data.frame(
-    name=pgdxmuts$Transcript,
-    basescript=substr(pgdxmuts$Transcript, start=1,stop=8),
-    cdnachange=pgdxmuts$cDNA.change,    
-    oldbase=substr(pgdxmuts$cDNA.change, start=3,stop=3),
-    loc=substr(pgdxmuts$cDNA.change,start=4,stop=nchar(pgdxmuts$cDNA.change)-1),
-    newbase=substr(pgdxmuts$cDNA.change,start=nchar(pgdxmuts$cDNA.change),stop=nchar(pgdxmuts$cDNA.change))
+    name=df.in2$Transcript,
+    basescript=substr(df.in2$Transcript, start=1,stop=8),
+    cdnachange=df.in2$cDNA.change,    
+    oldbase=substr(df.in2$cDNA.change, start=3,stop=3),
+    loc=substr(df.in2$cDNA.change,start=4,stop=nchar(df.in2$cDNA.change)-1),
+    newbase=substr(df.in2$cDNA.change,start=nchar(df.in2$cDNA.change),stop=nchar(df.in2$cDNA.change))
     )
 
 #Column bind parsed mutation info to orginal input and merge with mrna data
-df.muts<-merge(cbind(pgdxmuts, pgdxparsed), df.mrnas)
+df.muts<-merge(cbind(df.in2, pgdxparsed), df.in1)
 
 #Get genomic DNA from UCSC hg18 database
-
-
 seqnames(Hsapiens)
 
 ################################################################################
 #        Clean Up                                                       #######
 ##############################################################################
-detach("package:plyr")
-detach("package:Biostrings")
+
 ### REMOVE ALL OBJECTS ### 
-rm(list=ls(all=TRUE)) #uncomment to enable
+rm(list=ls(all=TRUE))
+
+### Detach Packages (reverse order from load) ###
+detach("package:plyr")
+detach("BSgenome.Hsapiens.UCSC.hg18")
+detach("package:Biostrings")
 
 
 
