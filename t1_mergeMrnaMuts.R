@@ -62,10 +62,31 @@ startStopToSequence <- function(x,y){
 #requires lists of genomic positions of exonStarts and exonEnds
 getCDnaPos <- function(mut,exS,exE){
   #calculate array of exon lengths
-  exonls <- exS - exE
-  print(exonls)
+  exonls <- exE - exS
+  #find out which exon the mutation occurs in.
+  #highest start positon that is less than mutation positon
+  exN <- which(exS == max(exS[mut > exS]) )
   
-  return(1)
+  #Sum the lengths of the prior exons along with length to mutation from exN.
+  #This will be the length into to cDNA where the mutation position is.
+  cdnal <- sum(exonls[0:(exN-1)]) + (mut - exS[exN])
+  
+# Debugging output
+#   print(exonls)
+#   print("Exon Number")
+#   print(exN)
+#   print("Exon Start:")
+#   print(max(exS[mut > exS]))
+#   print("Exon Number Start Pos")
+#   print(exS[exN])
+#   print("Mutation Position")
+#   print(mut)
+#   print("Exon Number End Pos")
+#   print(exE[exN])
+#   print("Length into cDNA")
+#   print(cdnal)
+#   print("Debug Return")
+  return(cdnal)
   
 } 
 
@@ -120,6 +141,8 @@ df.in1$seq <- sapply(df.in1$seq, FUN=DNAString)
 #make column names all lower case
 colnames(df.in3) <- tolower(colnames(df.in3))
 colnames(df.in4) <- tolower(colnames(df.in4))
+#change name column of df.in3 (knownGene) to "transcript"
+df.in3 <- plyr::rename(df.in3, c("name" = "transcript") )
 #Convert sequence data to DNAString
 df.in3$seq <- sapply(df.in3$seq, FUN=DNAString)
 #Parse strings of digits separated by commas to array of integers
@@ -148,7 +171,7 @@ btn1[duplicated(btn1)]
 
 ### Using data set two ###
 length(df.in4$transcript)
-sum(df.in4$transcript %in% df.in3$name)
+sum(df.in4$transcript %in% df.in3$transcript)
 
 #Number of mutations that occur in the same transcript name
 sum(duplicated(df.in4$transcript))
@@ -182,7 +205,7 @@ df2.parsed<-data.frame(
     )
 
 #Column bind parsed mutation info to orginal input and merge with mrna data
-df1.muts<-merge(cbind(df.in2, df2.parsed), df.in1)
+df1 <-merge(cbind(df.in2, df2.parsed), df.in1)
 
 # TODO: Finish work on this data set later.
 
@@ -190,13 +213,18 @@ df1.muts<-merge(cbind(df.in2, df2.parsed), df.in1)
 ###  Parse Mutation Strings. Data Set Two      #######
 #####################################################
 
+### Merge knownGene data with mutation data
+df2 <- merge(df.in4, df.in3, by.x='transcript', by.y='transcript') 
+
 #This will construct a sequence as long as the mrna sequence for each transcript
 #However, the values in this will be the genomic position corresponding to the
 #cDNA of the transcript sequence.  Verbose and wasteful.
-d<-mapply(FUN=startStopToSequence,df.in3$exonstarts,df.in3$exonends)
+#d<-mapply(FUN=startStopToSequence,df.in3$exonstarts,df.in3$exonends)
 
-
-
+getCDnaPos(df2$leftflank[[5]] +1, df2$exonstarts[[5]], df2$exonends[[5]])
+a <- df2$leftflank[5] +1
+b <- df2$exonstarts[[5]]
+c <- df2$exonends[[5]]
 
 ################################################################################
 #        Clean Up                                                       #######
