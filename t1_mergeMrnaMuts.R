@@ -104,17 +104,22 @@ mut2pep <- function(leftflank,rightflank,exonstarts,exonends,cdsstart,cdsend,
   exonstarts <- unlist(exonstarts)
   exonends <- unlist(exonends)
   #unlist seq
-  seq <- unlist(seq)
+  seq <- seq[[1]]
   
   #mutation genome position start
   mutgposS <- leftflank+1
   #mutation genome position end
-  mutgposE <- rightflank+1
+  mutgposE <- rightflank-1
   
   ### Calculate type of mutation ###
   mtype <- mutgposE - mutgposS
   print("mutation position start - end: ")
   print(mtype)
+  if(mtype != 0){
+    print("mutation is not point mutation")
+    return(NA)
+  }
+
     
   #calc mutation position in mRNA
   mutrpos <- getMrnaPos(mutgposS, exonstarts, exonends)
@@ -130,7 +135,6 @@ mut2pep <- function(leftflank,rightflank,exonstarts,exonends,cdsstart,cdsend,
   print(trmrnaS)
   print(trmrnaE)
   
-  print(class(seq))
   #check that ref_allele is correct for the mRNA at the mutation position
   refAlle <- DNAString(ref_allele)
   print("Check that ref allele is correct at position before mutation")
@@ -159,6 +163,10 @@ mut2pep <- function(leftflank,rightflank,exonstarts,exonends,cdsstart,cdsend,
   nummis <- neditStartingAt(aasmut, aasref, starting.at=1, with.indels=FALSE, fixed=TRUE)
   print("Number of mismatches: ")
   print(nummis)
+  if(nummis == 0){
+    print("Synonymous Mutation")
+    return(NA)
+  }
   
 }
 
