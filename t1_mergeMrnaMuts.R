@@ -12,8 +12,9 @@
 #        SETUP                                                                 #
 ################################################################################
 
-#source("http://bioconductor.org/biocLite.R")
+source("http://bioconductor.org/biocLite.R")
 #biocLite("Biostrings")
+#biocLite("GenomicFeatures")
 
 #source("http://bioconductor.org/biocLite.R")
 #biocLite("BSgenome.Hsapiens.UCSC.hg18")
@@ -31,7 +32,9 @@ setwd("C:/Users/grossco/Documents/Devel/Rwork/working")
 
 
 library("Biostrings")
+library("BSgenome")
 library("BSgenome.Hsapiens.UCSC.hg18")
+library("GenomicFeatures")
 library("plyr")
 library("stringr")
 
@@ -58,37 +61,30 @@ startStopToSequence <- function(x,y){
 
 }
 
-#calculate cDNA position of genomic mutation position.
+#calculate cDNA position of genomic position.
 #requires lists of genomic positions of exonStarts and exonEnds
-getCDnaPos <- function(mut,exS,exE){
+getMrnaPos <- function(p,exS,exE){
   #calculate array of exon lengths
   exonls <- exE - exS
   #find out which exon the mutation occurs in.
   #highest start positon that is less than mutation positon
-  exN <- which(exS == max(exS[mut > exS]) )
+  exN <- which(exS == max(exS[p >= exS]) )
   
   #Sum the lengths of the prior exons along with length to mutation from exN.
   #This will be the length into to cDNA where the mutation position is.
-  cdnal <- sum(exonls[0:(exN-1)]) + (mut - exS[exN])
-  
-# Debugging output
-#   print(exonls)
-#   print("Exon Number")
-#   print(exN)
-#   print("Exon Start:")
-#   print(max(exS[mut > exS]))
-#   print("Exon Number Start Pos")
-#   print(exS[exN])
-#   print("Mutation Position")
-#   print(mut)
-#   print("Exon Number End Pos")
-#   print(exE[exN])
-#   print("Length into cDNA")
-#   print(cdnal)
-#   print("Debug Return")
-  return(cdnal)
-  
+  cdnal <- sum(exonls[0:(exN-1)]) + (p - exS[exN])
+
+  return(cdnal) 
 } 
+
+#calculate sum of exon lengths
+#requires lists of genomic positions of exonStarts and exonEnds
+calcExonLength <- function(exS,exE){
+  #calculate array of exon lengths
+  exonls <- exE - exS
+  #sum exon lengths
+  return(sum(exonls))
+}
 
 ################################################
 ###  Import Data                        #######
@@ -221,10 +217,56 @@ df2 <- merge(df.in4, df.in3, by.x='transcript', by.y='transcript')
 #cDNA of the transcript sequence.  Verbose and wasteful.
 #d<-mapply(FUN=startStopToSequence,df.in3$exonstarts,df.in3$exonends)
 
-getCDnaPos(df2$leftflank[[5]] +1, df2$exonstarts[[5]], df2$exonends[[5]])
-a <- df2$leftflank[5] +1
+#get cDNA position of start of mutation.
+#cdp <- getCDnaPos(df2$leftflank[[5]] +1, df2$exonstarts[[5]], df2$exonends[[5]])
+
+#mutation genome position
+mutgbpos <- df2$leftflank[5] +1
+#exonstarts and ends
 b <- df2$exonstarts[[5]]
 c <- df2$exonends[[5]]
+#calc mutation position in cDNA
+mutcpos <- getMrnaPos(mutgbpos, b, c)
+#calc coding sequence start and end (lengths into seq)
+cdss <- getMrnaPos(df2$cdsstart[[5]],b,c)
+cdse <- getMrnaPos(df2$cdsend[[5]],b,c)
+#calc transcription start and end (lengths into seq)
+txs <- getMrnaPos(df2$txstart[[5]],b,c)
+txe <- getMrnaPos(df2$txen[[5]],b,c)
+
+#make a copy of the genomic sequence
+mutseq <- reverseComplement(df2$seq[[5]])
+#check that ref_allele matches
+mutseq[mutcpos]  == DNAString(df2$ref_allele[5])
+#Make mutation
+mutseq[mutcpos] <- DNAString(df2$var_allele[5])
+
+#Exon lengths
+c-b
+
+#translate coding sequence of seq
+mrna<-df2$seq[[5]]
+cdmrna <- subseq(mrna,length(mrna)-cdse+1,length(mrna)-cdss)
+aas <- (translate(dna2rna(sub1)))
+
+
+
+ts <- extractTranscripts(Hsapiens[[df2$chrom[[5]]]], 
+                   IntegerList(b+1), IntegerList(c), 
+                   "+"
+                   )[[1]]
+df2$seq[[5]]
+reverseComplement(df2$seq[[5]])
+
+calcExonLength(b,c)
+length(df2$seq[[5]])
+
+
+d<-df2$seq[[5]]
+e<-dna2rna((d))
+f<-translate(reverse(e))
+
+
 
 ################################################################################
 #        Clean Up                                                       #######
@@ -236,7 +278,9 @@ rm(list=ls(all=TRUE))
 ### Detach Packages (reverse order from load) ###
 detach("package:stringr")
 detach("package:plyr")
+detach("package:GenomicFeatures")
 detach("package:BSgenome.Hsapiens.UCSC.hg18")
+detach("package:BSgenome")
 detach("package:Biostrings")
 
 
