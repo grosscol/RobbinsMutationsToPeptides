@@ -73,6 +73,12 @@ getMrnaPos <- function(p,exS,exE){
   #Sum the lengths of the prior exons along with length to mutation from exN.
   #This will be the length into to cDNA where the mutation position is.
   cdnal <- sum(exonls[0:(exN-1)]) + (p - exS[exN])
+  
+  #Since mRna is reversed from genomic dna, get 1-based position into mRna by:
+  # (length of exons) - (index into exon) + 1
+  #The UCSC database start postions are 0 based
+  #The UCSC database end positions are 1 based
+  cdnal <- sum(exonls) - cdnal + 1
 
   return(cdnal) 
 } 
@@ -84,6 +90,68 @@ calcExonLength <- function(exS,exE){
   exonls <- exE - exS
   #sum exon lengths
   return(sum(exonls))
+}
+
+#mutation to 21-mer peptide calculation
+#Take left flank position, right flank position, chromosome string, 
+#    exon starts, exon ends, coding start, coding end, mrna
+#  positions are genome positions, 
+#  mrna is from hg18.knownGeneMrna.seq (dna alaphabet)
+#Return AAString if applicable or NULL
+mut2pep <- function(lf,rf,chrom,exoS,exoE,cds,cde,ref,var,seq){
+  #mutation genome position start
+  mutgposS <- lf+1
+  #mutation genome position end
+  mutgposE <- rf+1
+  
+  ### Calculate type of mutation ###
+  mtype <- mutgposE - mutgposS
+  print("mutation position start - end: ")
+  print(mtype)
+    
+  #calc mutation position in mRNA
+  mutrpos <- getMrnaPos(mutgbpos, exoS, exoE)
+  print("Mutation position in mrna: ")
+  print(mutrpos)
+  
+  #calc mRNA coding sequence start and end given genomic positions
+  # the genomic end (3') is the mRna beginning (5'). 
+  # So use dna end to calc rna start
+  trmrnaE <- getMrnaPos(cds,exoS,exoE)
+  trmrnaS <- getMrnaPos(cde,exoS,exoE)
+  print("translated region positions in mRNA (start : end) ")
+  print(trmrnaS)
+  print(trmrnaE)
+  
+  #check that ref_allele is correct for the mRNA at the mutation position
+  refAlle <- DNAString(ref)
+  print("Check that ref allele is correct at position before mutation")
+  print(complement(seq[mutcpos]) == refAlle)
+  
+  #replace nucleotide with mutation and retain mutated copy
+  # since mRNA is complement of DNA, also complement variant allele
+  varAlle <- DNAString(var)
+  mutr <- replaceLetterAt(seq, mutrpos, complement(varAlle))
+  
+  #subsequence mRNA to get translated region of mutant mRNA
+  submutr <- subseq(mutr, trmrnaS, trmrnaE)
+  #subsequence mRNA te get translated region of normal mRNA
+  subrefr <- subseq(seq, trmrnaS, trmrnaE)
+  
+  #Do translation to get amino acid sequence
+  aasmut <- translate( dna2rna(submutr) )
+  aasref <- translate( dna2rna(subrefr) )
+  
+  #Calculate position of mutated peptide
+  # mutant mrna position - translation start pos in mrna = mutant translated pos
+  # round up on ( mutant trans pos / 3 ) gives codon position.
+  mutapos <- ceiling((mutcpos - trmrnaS)/3)
+  
+  #get number of mismatching letters
+  nummis <- neditStartingAt(aasmut, aasref, starting.at=1, with.indels=FALSE, fixed=TRUE)
+  print("Number of mismatches: ")
+  print(nummis)
+  
 }
 
 ################################################
@@ -212,27 +280,61 @@ df1 <-merge(cbind(df.in2, df2.parsed), df.in1)
 ### Merge knownGene data with mutation data
 df2 <- merge(df.in4, df.in3, by.x='transcript', by.y='transcript') 
 
-#This will construct a sequence as long as the mrna sequence for each transcript
-#However, the values in this will be the genomic position corresponding to the
-#cDNA of the transcript sequence.  Verbose and wasteful.
-#d<-mapply(FUN=startStopToSequence,df.in3$exonstarts,df.in3$exonends)
-
-#get cDNA position of start of mutation.
-#cdp <- getCDnaPos(df2$leftflank[[5]] +1, df2$exonstarts[[5]], df2$exonends[[5]])
-
 #mutation genome position
-mutgbpos <- df2$leftflank[5] +1
+mutgbpos <- df2$leftflank[5]+1
 #exonstarts and ends
-b <- df2$exonstarts[[5]]
-c <- df2$exonends[[5]]
-#calc mutation position in cDNA
-mutcpos <- getMrnaPos(mutgbpos, b, c)
-#calc coding sequence start and end (lengths into seq)
-cdss <- getMrnaPos(df2$cdsstart[[5]],b,c)
-cdse <- getMrnaPos(df2$cdsend[[5]],b,c)
+exoss <- df2$exonstarts[[5]]
+exose <- df2$exonends[[5]]
+
+#calc mutation position in mRNA
+mutcpos <- getMrnaPos(mutgbpos, exoss, exose)
+
+#calc mRNA coding sequence start and end given genomic positions
+# the genomic end (3') is the mRna beginning (5'). 
+# So use dna end to calc rna start
+trmrnaE <- getMrnaPos(df2$cdsstart[[5]],exoss,exose)
+trmrnaS <- getMrnaPos(df2$cdsend[[5]],exoss,exose)
+
+#check that ref_allele is correct for the mRNA at the mutation position
+refAlle <- DNAString(df2$ref_allele[[5]])
+complement(df2$seq[[5]][mutcpos]) == refAlle
+
+#replace nucleotide with mutation and retain mutated copy
+# since mRNA is complement of DNA, also complement variant allele
+varAlle <- DNAString(df2$var_allele[[5]])
+mutr <- replaceLetterAt(df2$seq[[5]],mutcpos, complement(varAlle))
+
+#subsequence mRNA to get translated region of mutant mRNA
+submutr <- subseq(mutr, trmrnaS, trmrnaE)
+#subsequence mRNA te get translated region of normal mRNA
+subrefr <- subseq(df2$seq[[5]], trmrnaS, trmrnaE)
+
+#Do translation to get amino acid sequence
+aasmut <- translate( dna2rna(submutr) )
+aasref <- translate( dna2rna(subrefr) )
+
+#Calculate position of mutated peptide
+# mutant mrna position - translation start pos in mrna = mutant translated pos
+# round up on ( mutant trans pos / 3 ) gives codon position.
+mutapos <- ceiling((mutcpos - trmrnaS)/3)
+
+#get number of mismatching letters
+neditStartingAt(aasmut, aasref, starting.at=1, with.indels=FALSE, fixed=TRUE)
+
+
+# foo <- DNAString('ACTTAGGATT')
+# foo
+# subseq(foo, start=5, end=2)
+# subseq(foo, start=3, end=2) <- DNAString("TAT")
+# foo
+# subseq(foo, start=5, end=2)
+# subseq(foo, start=2, end=5)<- DNAString("")
+# foo
+
+
 #calc transcription start and end (lengths into seq)
-txs <- getMrnaPos(df2$txstart[[5]],b,c)
-txe <- getMrnaPos(df2$txen[[5]],b,c)
+txs <- getMrnaPos(df2$txstart[[5]],exoss,exose)
+txe <- getMrnaPos(df2$txen[[5]],exoss,exose)
 
 #make a copy of the genomic sequence
 mutseq <- reverseComplement(df2$seq[[5]])
