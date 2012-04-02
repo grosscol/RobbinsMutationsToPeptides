@@ -161,12 +161,22 @@ mut2pep <- function(leftflank,rightflank,exonstarts,exonends,cdsstart,cdsend,
   
   #get number of mismatching letters
   nummis <- neditStartingAt(aasmut, aasref, starting.at=1, with.indels=FALSE, fixed=TRUE)
-  print("Number of mismatches: ")
+  print("Number of mismatches after mutation: ")
   print(nummis)
   if(nummis == 0){
-    print("Synonymous Mutation")
+    print("Is synonymous mutation.")
     return(NA)
   }
+  
+  la<-1
+  ra<-length(aasmut)
+  if(mutapos >= 10)
+    { la <- mutapos-10}
+  if(length(aasmut - mutapos > 10) )
+    {ra <- mustpos + 10}
+
+  
+  return(subseq(aasmut,la,ra))
   
 }
 
