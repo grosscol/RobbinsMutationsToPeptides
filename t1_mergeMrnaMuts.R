@@ -63,21 +63,27 @@ startStopToSequence <- function(x,y){
 
 #calculate cDNA position of genomic position.
 #requires lists of genomic positions of exonStarts and exonEnds
+# NOTE: UCSC database stores start positions using 0-based counting
+#        They store end positions using 1-based index.
 getMrnaPos <- function(p,exS,exE){
   #calculate array of exon lengths
   exonls <- exE - exS
+  
   #find out which exon the mutation occurs in.
   #highest start positon that is less than mutation positon
   exN <- which(exS == max(exS[p >= exS]) )
   
+  #print(c(exN,p,exS))
   #Sum the lengths of the prior exons along with length to mutation from exN.
   #This will be the length into to cDNA where the mutation position is.
   cdnal <- sum(exonls[0:(exN-1)]) + (p - exS[exN])
   
   #Since mRna is reversed from genomic dna, get 1-based position into mRna by:
-  # (length of exons) - (index into exon) + 1
+  # (length of exons) - (index into exon)
+  #Careful with length calcs. The above have been corrected for:
   #The UCSC database start postions are 0 based
   #The UCSC database end positions are 1 based
+  #Genome browser is 1 based index
   cdnal <- sum(exonls) - cdnal + 1
 
   return(cdnal) 
@@ -98,8 +104,8 @@ calcExonLength <- function(exS,exE){
 #  positions are genome positions, 
 #  mrna is from hg18.knownGeneMrna.seq (dna alaphabet)
 #Return AAString if applicable or NULL
-mut2pep <- function(leftflank,rightflank,exonstarts,exonends,cdsstart,cdsend,
-                    ref_allele,var_allele,seq, ...){
+mut2pep <- function(transcript,leftflank,rightflank,exonstarts,exonends,
+                    cdsstart,cdsend,ref_allele,var_allele,seq, ...){
   #unlist econstarts and ends
   exonstarts <- unlist(exonstarts)
   exonends <- unlist(exonends)
@@ -126,7 +132,6 @@ mut2pep <- function(leftflank,rightflank,exonstarts,exonends,cdsstart,cdsend,
     print("mutation is not point mutation")
     return(NA)
   }
-
     
   #calc mutation position in mRNA
   mutrpos <- getMrnaPos(mutgposS, exonstarts, exonends)
@@ -136,7 +141,9 @@ mut2pep <- function(leftflank,rightflank,exonstarts,exonends,cdsstart,cdsend,
   #calc mRNA coding sequence start and end given genomic positions
   # the genomic end (3') is the mRna beginning (5'). 
   # So use dna end to calc rna start
-  trmrnaE <- getMrnaPos(cdsstart,exonstarts,exonends)
+  # NOTE: need to subtract 1 from the end position calculation as start postions
+  #  in the UCSC database are 0 based.
+  trmrnaE <- getMrnaPos(cdsstart,exonstarts,exonends) - 1
   trmrnaS <- getMrnaPos(cdsend,exonstarts,exonends)
 #   print("translated region positions in mRNA (start : end) ")
 #   print(trmrnaS)
@@ -153,8 +160,8 @@ mut2pep <- function(leftflank,rightflank,exonstarts,exonends,cdsstart,cdsend,
   mutr <- replaceLetterAt(seq, mutrpos, complement(varAlle))
   
   if(length(mutr) < trmrnaE){
-    print("mRNA shorter than translation end. (transcript,leftflank)")
-    print(c(transcript,leftflank))
+    print("mRNA shorter than translation end. (transcript,leftflank,len,cdE,trEp)")
+    print(c(transcript,leftflank,length(mutr),cdsend,trmrnaE))
     return(NA)
   }
   
@@ -205,7 +212,14 @@ mut2pep <- function(leftflank,rightflank,exonstarts,exonends,cdsstart,cdsend,
   if(la < ra){
     aasmutshort <- subseq(aasmut,la,ra)
   }
-   
+  
+  #Check work
+  print(c(
+          'Result:',transcript,leftflank,
+          as.character(aasref[mutapos]),
+          as.character(aasmut[mutapos])
+          )
+        )
   return(aasmutshort)
   
 }
@@ -340,7 +354,11 @@ df2 <- merge(df.in4, df.in3, by.x='transcript', by.y='transcript')
 aminos <- splat(mut2pep)(df2[4,])
 aminos@metadata$reg <- "Demo metatadata text."
 
+#get 21 mer results
 res <- apply(df2, MARGIN=1, FUN=function(x){splat(mut2pep)(x)})
+#omit NA's
+res <- res[!is.na(res)]
+res
 
 # row <- 5
 # temp <- df2[row,c('transcript','leftflank','rightflank','chrom','exonstarts',
