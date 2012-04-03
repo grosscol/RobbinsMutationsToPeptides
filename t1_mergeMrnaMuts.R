@@ -120,7 +120,7 @@ mut2pep <- function(leftflank,rightflank,exonstarts,exonends,cdsstart,cdsend,
   
   ### Calculate type of mutation ###
   mtype <- mutgposE - mutgposS
-  print("mutation position start - end: ")
+#  print("mutation position start - end: ")
 #   print(mtype)
   if(mtype != 0){
     print("mutation is not point mutation")
@@ -152,6 +152,16 @@ mut2pep <- function(leftflank,rightflank,exonstarts,exonends,cdsstart,cdsend,
   varAlle <- DNAString(var_allele)
   mutr <- replaceLetterAt(seq, mutrpos, complement(varAlle))
   
+  if(length(mutr) < trmrnaE){
+    print("mRNA shorter than translation end. (transcript,leftflank)")
+    print(c(transcript,leftflank))
+    return(NA)
+  }
+  
+  if(trmrnaS == 0){
+    print("tranlation start position is zero.")
+    return(NA)
+  }
   #subsequence mRNA to get translated region of mutant mRNA
   submutr <- subseq(mutr, trmrnaS, trmrnaE)
   #subsequence mRNA te get translated region of normal mRNA
@@ -175,15 +185,27 @@ mut2pep <- function(leftflank,rightflank,exonstarts,exonends,cdsstart,cdsend,
     return(NA)
   }
   
+  if(aasmut[mutapos] == AAString('*')){
+    #mutation is a truncation
+    return(NA)
+  }
+  
   la<-1
   ra<-length(aasmut)
-  if(mutapos >= 10)
-    { la <- mutapos-10}
-  if(length(length(aasmut) - mutapos > 10) )
-    {ra <- mutapos + 10}
+  if(mutapos >= 10){ 
+    la <- mutapos-10
+  }
+  if( (length(aasmut) - mutapos) > 10) {
+    ra <- mutapos + 10
+  }
 
-  aasmutshort <- subseq(aasmut,la,ra)
+  aasmutshort <- NA
   
+  #check that subsequence indecies are in order
+  if(la < ra){
+    aasmutshort <- subseq(aasmut,la,ra)
+  }
+   
   return(aasmutshort)
   
 }
