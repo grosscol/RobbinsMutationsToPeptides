@@ -104,7 +104,14 @@ mut2pep <- function(leftflank,rightflank,exonstarts,exonends,cdsstart,cdsend,
   exonstarts <- unlist(exonstarts)
   exonends <- unlist(exonends)
   #unlist seq
-  seq <- seq[[1]]
+  if(class(seq)=="list"){
+    seq <- seq[[1]]
+  }
+  
+  if(class(seq) != "DNAString"){
+    print("seq is not class DNAString")
+    return(NA)
+  }
   
   #mutation genome position start
   mutgposS <- leftflank+1
@@ -114,7 +121,7 @@ mut2pep <- function(leftflank,rightflank,exonstarts,exonends,cdsstart,cdsend,
   ### Calculate type of mutation ###
   mtype <- mutgposE - mutgposS
   print("mutation position start - end: ")
-  print(mtype)
+#   print(mtype)
   if(mtype != 0){
     print("mutation is not point mutation")
     return(NA)
@@ -123,22 +130,22 @@ mut2pep <- function(leftflank,rightflank,exonstarts,exonends,cdsstart,cdsend,
     
   #calc mutation position in mRNA
   mutrpos <- getMrnaPos(mutgposS, exonstarts, exonends)
-  print("Mutation position in mrna: ")
-  print(mutrpos)
+#   print("Mutation position in mrna: ")
+#   print(mutrpos)
   
   #calc mRNA coding sequence start and end given genomic positions
   # the genomic end (3') is the mRna beginning (5'). 
   # So use dna end to calc rna start
   trmrnaE <- getMrnaPos(cdsstart,exonstarts,exonends)
   trmrnaS <- getMrnaPos(cdsend,exonstarts,exonends)
-  print("translated region positions in mRNA (start : end) ")
-  print(trmrnaS)
-  print(trmrnaE)
+#   print("translated region positions in mRNA (start : end) ")
+#   print(trmrnaS)
+#   print(trmrnaE)
   
   #check that ref_allele is correct for the mRNA at the mutation position
-  refAlle <- DNAString(ref_allele)
-  print("Check that ref allele is correct at position before mutation")
-  print(complement(seq[mutrpos]) == refAlle)
+#   refAlle <- DNAString(ref_allele)
+#   print("Check that ref allele is correct at position before mutation")
+#   print(complement(seq[mutrpos]) == refAlle)
   
   #replace nucleotide with mutation and retain mutated copy
   # since mRNA is complement of DNA, also complement variant allele
@@ -161,10 +168,10 @@ mut2pep <- function(leftflank,rightflank,exonstarts,exonends,cdsstart,cdsend,
   
   #get number of mismatching letters
   nummis <- neditStartingAt(aasmut, aasref, starting.at=1, with.indels=FALSE, fixed=TRUE)
-  print("Number of mismatches after mutation: ")
-  print(nummis)
+#   print("Number of mismatches after mutation: ")
+#   print(nummis)
   if(nummis == 0){
-    print("Is synonymous mutation.")
+#     print("Is synonymous mutation.")
     return(NA)
   }
   
@@ -172,11 +179,12 @@ mut2pep <- function(leftflank,rightflank,exonstarts,exonends,cdsstart,cdsend,
   ra<-length(aasmut)
   if(mutapos >= 10)
     { la <- mutapos-10}
-  if(length(aasmut - mutapos > 10) )
-    {ra <- mustpos + 10}
+  if(length(length(aasmut) - mutapos > 10) )
+    {ra <- mutapos + 10}
 
+  aasmutshort <- subseq(aasmut,la,ra)
   
-  return(subseq(aasmut,la,ra))
+  return(aasmutshort)
   
 }
 
@@ -283,8 +291,8 @@ regnewbase <- '^c\\.\\w\\d+(\\w)$' #will always be the 4 to len - 1 chars
 regbaseloc <- '^c\\.\\w(\\d+)\\w$' #will always be the last char
 
 #Instead, just use known positional format to get values.
-df2.parsed<-data.frame(
-    name       =df.in2$Transcript,
+df.in2.parsed<-data.frame(
+    name       =df.in2$transcript,
     basescript =substr(df.in2$transcript, start=1,stop=8),
     cdnachange =df.in2$cdna.change,    
     oldbase    =substr(df.in2$cdna.change, start=3,stop=3),
@@ -295,7 +303,7 @@ df2.parsed<-data.frame(
     )
 
 #Column bind parsed mutation info to orginal input and merge with mrna data
-df1 <-merge(cbind(df.in2, df2.parsed), df.in1)
+df1 <-merge(cbind(df.in2, df.in2.parsed), df.in1)
 
 # TODO: Finish work on this data set later.
 
@@ -306,17 +314,23 @@ df1 <-merge(cbind(df.in2, df2.parsed), df.in1)
 ### Merge knownGene data with mutation data
 df2 <- merge(df.in4, df.in3, by.x='transcript', by.y='transcript') 
 
-row <- 5
-temp <- df2[row,c('transcript','leftflank','rightflank','chrom','exonstarts',
-                'exonends','cdsstart','cdsend','ref_allele','var_allele')]
-df2$seq[[row]]
 
-mut2pep(temp$leftflank,temp$rightflank,temp$chrom,temp$exonstarts,temp$exonends,
-        temp$cdsstart,temp$cdsend,temp$ref_allele,temp$var_allele,df2$seq[[row]])
+aminos <- splat(mut2pep)(df2[4,])
+aminos@metadata$reg <- "Demo metatadata text."
 
-temp$exonstarts[[1]]
+res <- apply(df2, MARGIN=1, FUN=function(x){splat(mut2pep)(x)})
 
-splat(mut2pep)(df2[5,])
+# row <- 5
+# temp <- df2[row,c('transcript','leftflank','rightflank','chrom','exonstarts',
+#                 'exonends','cdsstart','cdsend','ref_allele','var_allele')]
+# df2$seq[[row]]
+# 
+# mut2pep(temp$leftflank,temp$rightflank,temp$chrom,temp$exonstarts,temp$exonends,
+#         temp$cdsstart,temp$cdsend,temp$ref_allele,temp$var_allele,df2$seq[[row]])
+# 
+# temp$exonstarts[[1]]
+
+
 # #mutation genome position
 # mutgbpos <- df2$leftflank[5]+1
 # #exonstarts and ends
