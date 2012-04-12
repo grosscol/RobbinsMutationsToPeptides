@@ -99,7 +99,7 @@ calcExonLength <- function(exS,exE){
 }
 
 #Function designed for splat with df2
-doRow <- function(transcript,chr,leftflank,rightflank,ref_allele,var_allele,
+doRow <- function(transcript,chr,leftflank,rightflank,var_allele,
                   chrom,strand,txstart,txend,cdsstart,cdsend,
                   exoncount,exonstarts,exonends,proteinid,alignid,seq){
   
@@ -229,25 +229,25 @@ doRow <- function(transcript,chr,leftflank,rightflank,ref_allele,var_allele,
   
   
   #Sanity Checks
-  mrnalen - exonlen # should be 0
-  txstart - exonstarts[[1]]
-  txend - exonends[[exoncount]]
-  length(trnscrtDNA) - length(seq) #should be zero or negative
-  length(trnscrtDNA) / 3 #should be an integer
-  #Report reference alleles
-   paste(transcript, leftflank, "refs (NT AA):",
-         as.character(subseq(trnscrtDNA,start=mutTrnscrtDNAPosition,width=1)),
-         as.character(subseq(aaSequence,start=mutAAPosition,width=1)), sep=' ')
-  length(aaMutTrunc) #should be 21 or less
+#   mrnalen - exonlen # should be 0
+#   txstart - exonstarts[[1]] # should be 0
+#   txend - exonends[[exoncount]] # should be 0
+#   length(trnscrtDNA) - length(seq) #should be zero or negative
+#   length(trnscrtDNA) / 3 #should be an integer
+#   #Report reference alleles
+#    paste(transcript, leftflank, "refs (NT AA):",
+#          as.character(subseq(trnscrtDNA,start=mutTrnscrtDNAPosition,width=1)),
+#          as.character(subseq(aaSequence,start=mutAAPosition,width=1)), sep=' ')
+#   length(aaMutTrunc) #should be 21 or less
   
   
   #Return truncated mutant AA sequence
-  aaMutTrunc
+  return(aaMutTrunc)
 }
 
 #Immediate Debug
-dfsm$aaS[1:20] <- apply(df2[1:20,], MARGIN=1, FUN=function(x){splat(doRow)(x)})
-dfsm$aaS
+# dfsm$aaS[1:20] <- apply(df2[1:20,], MARGIN=1, FUN=function(x){splat(doRow)(x)})
+# dfsm$aaS
 
 
 ################################################

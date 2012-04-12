@@ -12,7 +12,7 @@
 #        SETUP                                                                 #
 ################################################################################
 
-source("http://bioconductor.org/biocLite.R")
+#source("http://bioconductor.org/biocLite.R")
 #biocLite("Biostrings")
 #biocLite("GenomicFeatures")
 
@@ -105,7 +105,7 @@ calcExonLength <- function(exS,exE){
 #  mrna is from hg18.knownGeneMrna.seq (dna alaphabet)
 #Return AAString if applicable or NULL
 mut2pep <- function(transcript,leftflank,rightflank,exonstarts,exonends,
-                    cdsstart,cdsend,ref_allele,var_allele,seq, ...){
+                    cdsstart,cdsend,ref_allele,var_allele,seq,strand, ...){
   #unlist econstarts and ends
   exonstarts <- unlist(exonstarts)
   exonends <- unlist(exonends)
@@ -213,11 +213,15 @@ mut2pep <- function(transcript,leftflank,rightflank,exonstarts,exonends,
     aasmutshort <- subseq(aasmut,la,ra)
   }
   
+  #Count stop codons
+  stops <- countPattern(pattern='*',subject=aasref)
+  
   #Check work
   print(c(
           'Result:',transcript,leftflank,
           as.character(aasref[mutapos]),
-          as.character(aasmut[mutapos])
+          as.character(aasmut[mutapos]),
+          stops, strand
           )
         )
   return(aasmutshort)
@@ -271,7 +275,7 @@ colnames(df.in2) <- tolower(colnames(df.in2))
 #Convert sequence data to DNAString
 df.in1$seq <- sapply(df.in1$seq, FUN=DNAString)
 
-### Using data set one ###
+### Using data set two ###
 #make column names all lower case
 colnames(df.in3) <- tolower(colnames(df.in3))
 colnames(df.in4) <- tolower(colnames(df.in4))
@@ -352,14 +356,16 @@ df2 <- merge(df.in4, df.in3, by.x='transcript', by.y='transcript')
 
 
 aminos <- splat(mut2pep)(df2[4,])
-aminos@metadata$reg <- "Demo metatadata text."
 
 #get 21 mer results
+a <- splat(mut2pep)(df2[24,])
 res <- apply(df2, MARGIN=1, FUN=function(x){splat(mut2pep)(x)})
 #omit NA's
 res <- res[!is.na(res)]
 res
 
+
+class(resv)
 # row <- 5
 # temp <- df2[row,c('transcript','leftflank','rightflank','chrom','exonstarts',
 #                 'exonends','cdsstart','cdsend','ref_allele','var_allele')]
