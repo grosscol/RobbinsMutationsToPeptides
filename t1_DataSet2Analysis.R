@@ -37,6 +37,7 @@ library("BSgenome.Hsapiens.UCSC.hg18")
 library("GenomicFeatures")
 library("plyr")
 library("stringr")
+library("reshape")
 
 ################################################################################
 #        MAIN                                                                  #
@@ -98,10 +99,36 @@ calcExonLength <- function(exS,exE){
   return(sum(exonls))
 }
 
+
+#Function wrapper designed for splat with df2 & verbose
+doRowVerbose <- function(transcript,chr,leftflank,rightflank,var_allele,
+                         chrom,strand,txstart,txend,cdsstart,cdsend,
+                         exoncount,exonstarts,exonends,proteinid,alignid,seq,
+                         rettype='rowdata', ...){
+  
+  crap <- list(...) #make a named list of the crap we are ignoring
+  doRow(transcript,chr,leftflank,rightflank,var_allele,
+        chrom,strand,txstart,txend,cdsstart,cdsend,
+        exoncount,exonstarts,exonends,proteinid,alignid,seq,
+        rettype='rowdata')
+
+}
+  
 #Function designed for splat with df2
 doRow <- function(transcript,chr,leftflank,rightflank,var_allele,
                   chrom,strand,txstart,txend,cdsstart,cdsend,
-                  exoncount,exonstarts,exonends,proteinid,alignid,seq){
+                  exoncount,exonstarts,exonends,proteinid,alignid,seq,
+                  rettype='mutaa', ...){
+  #Ignore unused variables
+  crap <- list(...) #make a named list of the crap we are ignoring
+  
+  #Check return type
+  if( rettype %in% c('mutaa','rowdata') ){
+    #Valid return type specified
+  }else{
+    print('rettype not \"mutaa\" or \"rowdata\"')
+    return(NA)
+  }
   
   #only deal with point mutations for now
   if( (rightflank - leftflank - 1) > nchar(var_allele) ){
@@ -241,13 +268,29 @@ doRow <- function(transcript,chr,leftflank,rightflank,var_allele,
 #   length(aaMutTrunc) #should be 21 or less
   
   
+  if(rettype == 'rowdata'){
+    #Return a row of data for rbinding
+    retRow <- list(
+      'transcript'=transcript,
+      'leftflank'=leftflank,
+      'mutTrnscPos'=mutTrnscrtDNAPosition,
+      'trnscStrand'=strand,
+      'mutAAPos'=mutAAPosition,
+      'refAA'=as.character(aaSequence[mutAAPosition]),
+      'mutAA'=as.character(aaMutSequence[mutAAPosition]),
+      'drunkmer'=as.character(aaMutTrunc)
+                )
+    return(retRow)
+  }
   #Return truncated mutant AA sequence
   return(aaMutTrunc)
 }
 
 #Immediate Debug
-# dfsm$aaS[1:20] <- apply(df2[1:20,], MARGIN=1, FUN=function(x){splat(doRow)(x)})
-# dfsm$aaS
+
+dfsm$aaS[1:20] <- apply(df2[1:20,], MARGIN=1, FUN=function(x){splat(doRow)(x)})
+dfsm$aaS[1:20] <- apply(df2[1:20,], MARGIN=1, FUN=function(x){splat(doRow)(x)})
+dfsm$aaS
 
 
 ################################################
@@ -311,7 +354,16 @@ dfsm.i <- dfsm[!is.na(dfsm$aaS),]
 aaOutputSet <- AAStringSet(sapply(dfsm.i$aaS,FUN=as.character))
 names(aaOutputSet)<-paste(dfsm.i$transcript,"leftflank",dfsm.i$leftflank)
 
-#Full Run
+### Small test RUN w/ VERBOSE ###
+#get list of character vectors
+retl <- apply(df2[c(1:20),], MARGIN=1, FUN=function(x){splat(doRowVerbose)(x)})
+#Find NA's in returned list and remove them
+lnas<-which(sapply(retl,FUN=function(x){is.na(x[1])}))
+retl <- retl[-lnas]
+#Convert returned list to data frame
+retdf <- do.call('rbind',lapply(retl, "["))
+
+### Full Run ###
 dfbig <- df2[,c(1:16)]
 dfbig$aaS <- apply(df2, MARGIN=1, FUN=function(x){splat(doRow)(x)})
 #trim to values of interest
@@ -320,6 +372,16 @@ dfbig.i <- dfbig[!is.na(dfbig$aaS),]
 aaOutputSet <- AAStringSet(sapply(dfbig.i$aaS,FUN=as.character))
 names(aaOutputSet)<-paste(dfbig.i$transcript,"leftflank",dfbig.i$leftflank)
 
+### FULL RUN w/ VERBOSE ###
+#get list of character vectors
+retl <- apply(df2[,], MARGIN=1, FUN=function(x){splat(doRowVerbose)(x)})
+#Find NA's in returned list and remove them
+lnas<-which(sapply(retl,FUN=function(x){is.na(x[1])}))
+retl <- retl[-lnas]
+#Convert returned list to data frame
+retdf <- data.frame(do.call('rbind',lapply(retl, "[")))
+#Fucking have to recast each column with unlist
+retdf <- data.frame(lapply(retdf,function(x) factor(unlist(x)) ))
 
 
 ################################################
@@ -328,9 +390,14 @@ names(aaOutputSet)<-paste(dfbig.i$transcript,"leftflank",dfbig.i$leftflank)
 outname <- 'dataset2.fa'
 outfile <- paste(myOutDir,outname,sep='')
 
-
+#write FASTA format output
 write.XStringSet(aaOutputSet, filepath=outfile, append=FALSE, format="fasta")
-#writeFASTA,file=outfile, desc=NULL, append=FALSE, width=80)
+
+
+#Write Verbose annotation output
+outname <- 'dataset2.verbose.txt'
+outfile <- paste(myOutDir,outname,sep='')
+write.table(retdf, file=outfile, sep='\t',quote=FALSE)
 
 
 
@@ -342,6 +409,7 @@ write.XStringSet(aaOutputSet, filepath=outfile, append=FALSE, format="fasta")
 rm(list=ls(all=TRUE))
 
 ### Detach Packages (reverse order from load) ###
+detach("package:reshape")
 detach("package:stringr")
 detach("package:plyr")
 detach("package:GenomicFeatures")
