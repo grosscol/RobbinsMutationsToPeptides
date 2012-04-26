@@ -287,10 +287,10 @@ doRow <- function(transcript,chr,leftflank,rightflank,var_allele,
 }
 
 #Immediate Debug
-
-dfsm$aaS[1:20] <- apply(df2[1:20,], MARGIN=1, FUN=function(x){splat(doRow)(x)})
-dfsm$aaS[1:20] <- apply(df2[1:20,], MARGIN=1, FUN=function(x){splat(doRow)(x)})
-dfsm$aaS
+# 
+# dfsm$aaS[1:20] <- apply(df2[1:20,], MARGIN=1, FUN=function(x){splat(doRow)(x)})
+# dfsm$aaS[1:20] <- apply(df2[1:20,], MARGIN=1, FUN=function(x){splat(doRow)(x)})
+# dfsm$aaS
 
 
 ################################################
