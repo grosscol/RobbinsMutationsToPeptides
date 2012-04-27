@@ -197,7 +197,7 @@ doRow <- function(transcript,chr,leftflank,rightflank,var_allele,
   if(strand=='+'){
     mutAAPosition <- ceiling(mutTrnscrtDNAPosition / 3)
   }else{
-    mutAAPosition <- ceiling((length(trnscrtDNA)-mutTrnscrtDNAPosition) / 3 )
+    mutAAPosition <- floor((length(trnscrtDNA)-mutTrnscrtDNAPosition) / 3 ) + 1
   }
 
   
@@ -235,7 +235,15 @@ doRow <- function(transcript,chr,leftflank,rightflank,var_allele,
   
   #Check Mutant Amino Acid against reference
   if(aaMutSequence[mutAAPosition] == aaSequence[mutAAPosition]){
-    print("Synonymous mutation.")
+    print(paste("Synonymous mutation.",
+                mutAAPosition, 
+                length(trnscrtDNA),
+                mutTrnscrtDNAPosition,
+                as.character(aaMutSequence[mutAAPosition]),
+                as.character(aaSequence[mutAAPosition]),
+                as.character(trnscrtDNA[1:6]),
+                as.character(codingMRNA[(length(codingMRNA)-6):(length(codingMRNA))])
+                ))
     return(NA)
   }
   
@@ -275,6 +283,7 @@ doRow <- function(transcript,chr,leftflank,rightflank,var_allele,
       'leftflank'=leftflank,
       'mutTrnscPos'=mutTrnscrtDNAPosition,
       'trnscStrand'=strand,
+      length(trnscrtDNA),
       'mutAAPos'=mutAAPosition,
       'refAA'=as.character(aaSequence[mutAAPosition]),
       'mutAA'=as.character(aaMutSequence[mutAAPosition]),
@@ -288,7 +297,7 @@ doRow <- function(transcript,chr,leftflank,rightflank,var_allele,
 
 #Immediate Debug
 # 
-# dfsm$aaS[1:20] <- apply(df2[1:20,], MARGIN=1, FUN=function(x){splat(doRow)(x)})
+#apply(df2[26,], MARGIN=1, FUN=function(x){splat(doRow)(x)})
 # dfsm$aaS[1:20] <- apply(df2[1:20,], MARGIN=1, FUN=function(x){splat(doRow)(x)})
 # dfsm$aaS
 
