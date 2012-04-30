@@ -229,7 +229,9 @@ doRow <- function(transcript,chr,leftflank,rightflank,var_allele,
   
   #Check if variant amino acid is a stop.
   if(aaMutSequence[mutAAPosition] == AAString("*")){
-    print("Mutation truncates peptide.")
+    print(paste("Mutation truncates peptide.",transcript,leftflank))
+    #Subset the mutant AA sequence at the stop codon
+    #aaMutSequence <- subseq(aaMutSequence,start=1,end=mutAAPosition)
     return(NA)
   }
   
@@ -341,7 +343,6 @@ df.in3$seq <- sapply(df.in3$seq, FUN=DNAString)
 #Parse strings of digits separated by commas to array of integers
 df.in3$exonstarts<-unname(sapply(df.in3$exonstarts, FUN=digitStringToArray))
 df.in3$exonends<-unname(sapply(df.in3$exonends, FUN=digitStringToArray))
-
 
 #######################################################
 ###  Parse Mutation Strings. Data Set Two      #######
