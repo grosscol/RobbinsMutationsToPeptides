@@ -132,12 +132,9 @@ doRow <- function(transcript,chr,leftflank,rightflank,
     return(NA)
   }
   
-  #only deal with point mutations for now
-  if( (rightflank - leftflank - 1) > nchar(var_allele) ){
-    print("Site longer than variant. Deletion. Deal with later.")
-    return(NA)
-  }else if((rightflank - leftflank - 1) < nchar(var_allele)){
-    print("Site shorter than variant. Insertion. Deal with later.")
+  if(leftflank < cdsstart || leftflank > cdsend){
+    print(paste("Mutation outside of coding region for:",transcript,
+                "left flank",leftflank,sep=' '))
     return(NA)
   }
   
@@ -163,15 +160,30 @@ doRow <- function(transcript,chr,leftflank,rightflank,
   codingStarts <- exonstarts[codingExons] + 1 #starts are 0 based
   codingEnds   <- exonends[codingExons]
   
+  
   #replace first exon coding start position with cdsstart
   codingStarts[1] <- cdsstart + 1 #starts are 0-based
   #replace last exon coding end position with cdsend
   codingEnds[length(codingEnds)] <-cdsend
   
+
   #This takes a fucking while. Get all coding exon dna in a set
-  trnscrtDNAset <- DNAStringSet(unmasked(Hsapiens[[chrom]]), 
+  trnscrtDNAset <- tryCatch({
+    DNAStringSet(unmasked(Hsapiens[[chrom]]), 
                                 start=as.vector(codingStarts), 
-                                end=as.vector(codingEnds) )
+                                end=as.vector(codingEnds) );
+    }, error= function(ex){
+      cat("Genome Lookup Error!")
+      return(NA)
+    }
+  )
+  if(class(trnscrtDNAset) != "DNAStringSet")
+  {
+    cat(" Returning NA.\n")
+    return(NA)
+  }
+  
+
   #Combine all sequences together.
   trnscrtDNA <- unlist(trnscrtDNAset)
   
@@ -211,23 +223,34 @@ doRow <- function(transcript,chr,leftflank,rightflank,
   #Concatenation of [left side],[variant allele],[right side]
   lpmut <- mutTrnscrtDNAPosition - 1
   rpmut <- mutTrnscrtDNAPosition + nchar(ref_allele)
-  mutantTrnscrptDNA <- xscat(
-                          substr(trnscrtDNA, 1, lpmut), 
-                          DNAString(var_allele), 
-                          substr(trnscrtDNA,rpmut, length(trnscrtDNA))
-                       )
-  #if length of mutation site == length of variant at site, then substitution
-#   if((rightflank - leftflank - 1) == nchar(var_allele)){
-#     
-#     
-#     xscat(trnscrt)
-#     #make a copy
-#     mutantTrnscrptDNA <- trnscrtDNA
-#     #make the mutation
-#     subseq(mutantTrnscrptDNA, start=mutTrnscrtDNAPosition, 
-#            width=nchar(var_allele)) <- DNAString(var_allele)
-#     
-#   }
+  if(lpmut == 0){
+    print("Mutation includes start of coding sequence. Handle Later.")
+    return(NA)
+  }
+  
+  
+  mutantTrnscrptDNA <- tryCatch( 
+    expr= { 
+      xscat(
+        substr(trnscrtDNA, 1, lpmut), 
+        DNAString(var_allele), 
+        substr(trnscrtDNA,rpmut, length(trnscrtDNA))
+        );
+    }, error = function(ex) {
+      cat("Holy crap an error\n")
+      return(NA)
+    }
+  )
+  
+  if(class(mutantTrnscrptDNA) != 'DNAString' ){
+    cat("mutantTranscptProblem. class: ",
+        class(mutantTrnscrptDNA),
+        " Val: ",
+        as.character(mutantTrnscrptDNA),
+        "\n")
+    return(NA) #return from function NA
+  }
+
   
   #Get coding MRNA and coding Mutant MRNA
   #genome is stored as '-' sense sequence. reverseComplement this strand.
@@ -241,8 +264,36 @@ doRow <- function(transcript,chr,leftflank,rightflank,
   }
   
   #Do translation
-  aaSequence <- translate(codingMRNA)
-  aaMutSequence <- translate(mutantMRNA)
+  #aaSequence <- translate(codingMRNA)
+  aaSequence <-tryCatch({
+    translate(codingMRNA)
+  }, error = function(ex) {
+    cat("Normal Translation Error in:")
+    print(codingMRNA)
+    print(ex)
+    return(NA)
+  }
+  )
+  
+  if(class(aaSequence) != "AAString"){
+    cat("AA error Returning NA\n")
+    return(NA)
+  }
+  
+  aaMutSequence <-tryCatch({
+    translate(mutantMRNA)
+    }, error = function(ex) {
+      cat("Mutant Translation Error in: ")
+      print(mutantMRNA)
+      print(ex)
+      return(NA)
+    }
+  )
+  
+  if(class(aaMutSequence) != "AAString"){
+    cat("AA error Returning NA\n")
+    return(NA)
+  }
   
   #Check if variant amino acid is a stop.
   if(aaMutSequence[mutAAPosition] == AAString("*")){
@@ -279,7 +330,15 @@ doRow <- function(transcript,chr,leftflank,rightflank,
   }
   
   #Do truncation
-  aaMutTrunc <- subseq(aaMutSequence,start=la,end=ra)
+  aaMutTrunc <- tryCatch({
+     subseq(aaMutSequence,start=la,end=ra);
+  }, error = function(ex){
+    print(ex)
+    cat("AminoAcid Trunc Error\n")
+    
+    return(NA)
+  })
+  
   
   
   #Sanity Checks
@@ -311,7 +370,7 @@ doRow <- function(transcript,chr,leftflank,rightflank,
     return(retRow)
   }
   #Return truncated mutant AA sequence
-  return(aaMutTrunc)
+  return(as.character(aaMutTrunc))
 }
 
 
@@ -348,6 +407,11 @@ dfc <- plyr::rename(dfc, c("var" = "var_allele", "ref" = "ref_allele") )
 dfc$exonstarts<-unname(sapply(dfc$exonstarts, FUN=digitStringToArray))
 dfc$exonends<-unname(sapply(dfc$exonends, FUN=digitStringToArray))
 
+### REMOVE DUPLICATES ###
+dupes <- duplicated(dfc$transcript, dfc$pos)
+dfc<-dfc[!dupes,]
+
+
 ### CALCULATE LEFTFLANK AND RIGHTFLANK ###
 #For point mutations (given ref allele is not *)
 pnts <- dfc$ref_allele != '*'
@@ -381,25 +445,35 @@ dfc$ref_allele[ins] <- ''
 dfsm <- dfc[c(1:20),]
 dfsm$aaS[1:20] <- apply(dfc[1:20,], MARGIN=1, FUN=function(x){splat(doRow)(x)})
 
+#Error test
+dftest <- dfc[c(1600:1700),]
+dftest$aaS <- apply(dfc[c(1600:1700),], MARGIN=1, FUN=function(x){splat(doRow)(x)})
 
 ### Full Run ###
-dfbig <- dfc[,c(1:16)]
+dfbig <- dfc[,-which(colnames(dfc)=='seq')]
 dfbig$aaS <- apply(dfc, MARGIN=1, FUN=function(x){splat(doRow)(x)})
 
 ################################################
 ###  Output Data                        #######
 ##############################################
-
+cols.out<-c(colnames(dfbig)[1:8],colnames(dfbig)[12:19])
+df.out<- dfbig[!is.na(dfbig$aaS),cols.out]
 ### Output sorted and cleaned up data
 #reorder data frame so that columns of like classes are next to each other
 #character & Date, factor,logical, integer, numeric columns  
-# cls<- unlist( lapply(dfc,class), use.names=FALSE )
+# cls<- unlist( lapply(dfbig,class), use.names=FALSE )
 # ord <- c( grep('character',cls), grep('Date',cls), grep('factor',cls), grep('logical',cls),
 #           grep('integer',cls),grep('numeric',cls) )
 # dfc.o<-dfc[,ord]
 # rle(cls[ord])
 
-
+outfile<-file(description=paste(myOutDir,'GastricMutsToPeps.txt',sep=''),
+                 open='w', encoding='UTF-8', raw=FALSE)
+#write data
+write.table(x=df.out, file=outfile,append=FALSE,quote=FALSE,sep='\t',eol='\n',na='NA',
+            dec='.', row.names=FALSE, col.names=TRUE, qmethod='escape')
+#close connection
+close(outfile)
 
 
 
