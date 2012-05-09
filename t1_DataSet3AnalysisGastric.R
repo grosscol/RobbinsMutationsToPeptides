@@ -33,7 +33,7 @@ setwd("C:/Users/grossco/Documents/Devel/Rwork/working")
 
 library("Biostrings")
 library("BSgenome")
-library("BSgenome.Hsapiens.UCSC.hg18")
+library("BSgenome.Hsapiens.UCSC.hg19")
 library("GenomicFeatures")
 library("plyr")
 library("stringr")
@@ -101,7 +101,8 @@ calcExonLength <- function(exS,exE){
 
 
 #Function wrapper designed for splat with df2 & verbose
-doRowVerbose <- function(transcript,chr,leftflank,rightflank,var_allele,
+doRowVerbose <- function(transcript,chr,leftflank,rightflank,
+                         ref_allele,var_allele,
                          chrom,strand,txstart,txend,cdsstart,cdsend,
                          exoncount,exonstarts,exonends,proteinid,alignid,seq,
                          rettype='rowdata', ...){
@@ -187,7 +188,6 @@ doRow <- function(transcript,chr,leftflank,rightflank,
   #Combine all sequences together.
   trnscrtDNA <- unlist(trnscrtDNAset)
   
-  
   #calculate mutation start position (0-based ? or 1-based?) assuming 1-based
   mutStartPos <- leftflank + 1
   
@@ -211,20 +211,30 @@ doRow <- function(transcript,chr,leftflank,rightflank,
   #length calculations have to accomodated 1 based start (so just subtract 1)
   mutTrnscrtDNAPosition <- sum(mutLengthEnds - (mutLengthStarts - 1 ))
   
-  #calculate mutation position in amino acid sequence
+  #calculate mutation position in amino acid sequence.
+  #also determine if mutation is at a codon start (used later)
   if(strand=='+'){
-    mutAAPosition <- ceiling(mutTrnscrtDNAPosition / 3)
+    mutAAPosition <- ceiling(mutTrnscrtDNAPosition / 3) 
+    #if remainder is zero and ref_allele == '' (insertion) add 1 to AA position
+    #Only apply for INDELs
+    if(mutTrnscrtDNAPosition %% 3 == 0 && nchar(var_allele) != nchar(ref_allele)){
+        mutAAPosition <- mutAAPosition +1
+    }
   }else{
-    mutAAPosition <- floor((length(trnscrtDNA)-mutTrnscrtDNAPosition) / 3 ) + 1
+    mutAAPosition <- (length(trnscrtDNA)/3) - (ceiling(mutTrnscrtDNAPosition/3)) +1
+    if((length(trnscrtDNA)-mutTrnscrtDNAPosition+1) %% 3 == 0  && nchar(var_allele) != nchar(ref_allele) ){
+        mutAAPosition <- mutAAPosition +1
+    }
   }
   
   
+  #debug here
   ###Make mutation and get mutant DNA!
   #Concatenation of [left side],[variant allele],[right side]
   lpmut <- mutTrnscrtDNAPosition - 1
   rpmut <- mutTrnscrtDNAPosition + nchar(ref_allele)
   if(lpmut == 0){
-    print("Mutation includes start of coding sequence. Handle Later.")
+    print("Mutation includes start/end of coding sequence. Handle Later.")
     return(NA)
   }
   
@@ -298,19 +308,23 @@ doRow <- function(transcript,chr,leftflank,rightflank,
   #Check if variant amino acid is a stop.
   if(aaMutSequence[mutAAPosition] == AAString("*")){
     print(paste("Mutation truncates peptide.",transcript,leftflank))
-    #Subset the mutant AA sequence at the stop codon
-    #aaMutSequence <- subseq(aaMutSequence,start=1,end=mutAAPosition)
+    #debug
+    mutsegment <-subseq(mutantTrnscrptDNA,lpmut,(lpmut+nchar(var_allele)+1))
+    cat(as.character(mutsegment))
+    cat('\n')
+    cat(as.character(dna2rna(mutsegment)))
+    cat('\n')
     return(NA)
   }
   
-  #Check Mutant Amino Acid against reference
-  if(aaMutSequence[mutAAPosition] == aaSequence[mutAAPosition]){
+  #Check Mutant Amino Acid against reference (from mutAA to end of peptide)
+  if(aaMutSequence[mutAAPosition:length(aaMutSequence)] == aaSequence[mutAAPosition:length(aaSequence)]){
     print(paste("Synonymous mutation.",
                 mutAAPosition, 
                 length(trnscrtDNA),
                 mutTrnscrtDNAPosition,
-                as.character(aaMutSequence[mutAAPosition]),
-                as.character(aaSequence[mutAAPosition]),
+                as.character(aaMutSequence[(mutAAPosition):(mutAAPosition)]),
+                as.character(aaSequence[(mutAAPosition):(mutAAPosition)]),
                 as.character(trnscrtDNA[1:6]),
                 as.character(codingMRNA[(length(codingMRNA)-6):(length(codingMRNA))])
                 ))
@@ -329,6 +343,29 @@ doRow <- function(transcript,chr,leftflank,rightflank,
     ra <- mutAAPosition + 10
   }
   
+  #Check for frame shift
+  frameShift <- FALSE #false by default
+  if( nchar(var_allele) != nchar(ref_allele) ){
+    #check if sum of ref_alleles and var_alleles not divisible by 3 evenly
+    if( (nchar(var_allele)+nchar(ref_allele)) %%3 !=0 ){
+      frameShift <- TRUE
+    }
+  }
+  
+  #In the case of a frame shift, find stop codon or end of aa
+  if(frameShift){
+    stoppos <- regexpr('\\*',aaMutSequence) #find location of *
+    if(stoppos == -1){
+      #no stop codon?
+      #set truncation right side to end of amino
+      ra <- length(aaMutSequence)
+    }
+    else{
+      #set truncation right side to 1 before first stop
+      ra <- stoppos[1] - 1
+    }
+  }
+  
   #Do truncation
   aaMutTrunc <- tryCatch({
      subseq(aaMutSequence,start=la,end=ra);
@@ -338,21 +375,15 @@ doRow <- function(transcript,chr,leftflank,rightflank,
     
     return(NA)
   })
-  
-  
-  
-  #Sanity Checks
-  #   mrnalen - exonlen # should be 0
-  #   txstart - exonstarts[[1]] # should be 0
-  #   txend - exonends[[exoncount]] # should be 0
-  #   length(trnscrtDNA) - length(seq) #should be zero or negative
-  #   length(trnscrtDNA) / 3 #should be an integer
-  #   #Report reference alleles
-  #    paste(transcript, leftflank, "refs (NT AA):",
-  #          as.character(subseq(trnscrtDNA,start=mutTrnscrtDNAPosition,width=1)),
-  #          as.character(subseq(aaSequence,start=mutAAPosition,width=1)), sep=' ')
-  #   length(aaMutTrunc) #should be 21 or less
-  
+  #Debug truncation
+  aaNormTrunc <- tryCatch({
+    subseq(aaSequence,start=la,end=ra);
+  }, error = function(ex){
+    print(ex)
+    cat("AminoAcid Trunc Error\n")
+    
+    return(NA)
+  })
   
   if(rettype == 'rowdata'){
     #Return a row of data for rbinding
@@ -361,16 +392,21 @@ doRow <- function(transcript,chr,leftflank,rightflank,
       'leftflank'=leftflank,
       'mutTrnscPos'=mutTrnscrtDNAPosition,
       'trnscStrand'=strand,
-      length(trnscrtDNA),
+      'lengthTranscript'=length(trnscrtDNA),
       'mutAAPos'=mutAAPosition,
       'refAA'=as.character(aaSequence[mutAAPosition]),
       'mutAA'=as.character(aaMutSequence[mutAAPosition]),
-      'drunkmer'=as.character(aaMutTrunc)
+      'norm_mer'=as.character(aaNormTrunc),
+      'drunkmer'=as.character(aaMutTrunc),
+      'trnscrptDNA'=as.character(trnscrtDNA),
+      'seq'=as.character(seq)
       )
     return(retRow)
   }
+  
   #Return truncated mutant AA sequence
   return(as.character(aaMutTrunc))
+
 }
 
 
@@ -387,8 +423,8 @@ impdir<-'S:/TIL-LAB/Staff/Colin/Projects/MutationsToPeptides/procdata/'
 
 #import combined data frame
 infile<-paste(impdir,'mutsrefs2012-04-30_141449.txt',sep='')
-cls<- c( rep("character",3), rep("integer",5), rep("character",6), integer, rep("character",2) )
-dfc <-read.table(infile, header=TRUE, sep="\t",  colClasses=cls,
+#cls<- c( rep("character",3), rep("integer",5), rep("character",6), integer, rep("character",2) )
+dfc <-read.table(infile, header=TRUE, sep="\t",
                    comment.char="#",encoding="UTF-8",stringsAsFactors=FALSE)
 
 ################################################
@@ -408,19 +444,24 @@ dfc$exonstarts<-unname(sapply(dfc$exonstarts, FUN=digitStringToArray))
 dfc$exonends<-unname(sapply(dfc$exonends, FUN=digitStringToArray))
 
 ### REMOVE DUPLICATES ###
-dupes <- duplicated(dfc$transcript, dfc$pos)
-dfc<-dfc[!dupes,]
+# dupes <- duplicated(dfc[,c('transcript','pos')])
+# dfc<-dfc[!dupes,]
 
 
 ### CALCULATE LEFTFLANK AND RIGHTFLANK ###
-#For point mutations (given ref allele is not *)
+
+#get typs of mutations as lists of logical values
+# var_alleles with '-' are the way deletions are marked in this data
+# insertions marked with '+' in var_allele
+dels <- grepl(pattern='\\-', x=dfc$var_allele)
+ins <- grepl(pattern='\\+',x=dfc$var_allele)
 pnts <- dfc$ref_allele != '*'
+
+#For point mutations (given ref allele is not *)
 dfc$leftflank[pnts]  <- dfc$pos[pnts] - 1
 dfc$rightflank[pnts] <- dfc$pos[pnts] + 1
 
 #For deletions
-#Find var alleles with '-' as these are the way deletions are marked in this data
-dels <- grep(pattern='\\-', x=dfc$var_allele)
 #copy var allele data to ref allele (where it should have been)
 dfc$ref_allele[dels] <- substr(dfc$var_allele[dels],2,nchar(dfc$var_allele[dels]))
 dfc$leftflank[dels] <- dfc$pos[dels] - 1
@@ -428,14 +469,41 @@ dfc$rightflank[dels] <- dfc$pos[dels] + nchar(dfc$ref_allele[dels])
 #Set var_alleles to blank... since they are supposed to be deletions
 dfc$var_allele[dels] <- ''
 
-#For insertions (do so that first nuc of var sequence occupies position pos)
-ins <- grep(pattern='\\+',x=dfc$var_allele)
-dfc$leftflank[ins] =  dfc$pos[ins] - 1 
+
+#For insertions (position information contextual with gene strand.)
+minus <- dfc$strand=='-'
+#Flank calculations for '+' strand genes.
+# dfc$leftflank[ins] =  dfc$pos[ins] 
+# dfc$rightflank[ins] =  dfc$pos[ins] + 1 
+# # dfc$leftflank[ins] =  dfc$pos[ins] - 1 #method for indels
+# # dfc$rightflank[ins] =  dfc$pos[ins] #method for indels
+# #Flanks for '-' Strand Insertions (seems odd)
+# dfc$leftflank[ins & minus] = dfc$pos[ins & minus] -1
+# dfc$rightflank[ins & minus] = dfc$pos[ins & minus] 
+dfc$leftflank[ins] =  dfc$pos[ins] -1
 dfc$rightflank[ins] =  dfc$pos[ins]
+dfc$leftflank[ins & minus] = dfc$pos[ins & minus] 
+dfc$rightflank[ins & minus] = dfc$pos[ins & minus] +1
 #remove '+' from the var allele
 dfc$var_allele[ins] <- substr(dfc$var_allele[ins],2,nchar(dfc$var_allele[ins]))
 #Set ref_allele to blank... since it is supposed to be blank
 dfc$ref_allele[ins] <- ''
+
+
+
+################################################
+###  Output Intermediate Calculations   #######
+##############################################
+cols.out<-c(colnames(dfc)[1:8],colnames(dfc)[14:17])
+df.out<- dfc[,cols.out]
+
+outfile<-file(description=paste(myOutDir,'GastricIntermediateCalcs.txt',sep=''),
+              open='w', encoding='UTF-8', raw=FALSE)
+#write data
+write.table(x=df.out, file=outfile,append=FALSE,quote=FALSE,sep='\t',eol='\n',na='NA',
+            dec='.', row.names=FALSE, col.names=TRUE, qmethod='escape')
+#close connection
+close(outfile)
 
 ################################################
 ###  Analysis                           #######
@@ -445,29 +513,84 @@ dfc$ref_allele[ins] <- ''
 dfsm <- dfc[c(1:20),]
 dfsm$aaS[1:20] <- apply(dfc[1:20,], MARGIN=1, FUN=function(x){splat(doRow)(x)})
 
-#Error test
-dftest <- dfc[c(1600:1700),]
-dftest$aaS <- apply(dfc[c(1600:1700),], MARGIN=1, FUN=function(x){splat(doRow)(x)})
+### Small test RUN w/ VERBOSE ###
+#get list of character vectors
+retl <- apply(dfc[c(1:20),], MARGIN=1, FUN=function(x){splat(doRowVerbose)(x)})
+#Find NA's in returned list and remove them
+# lnas<-which(sapply(retl,FUN=function(x){is.na(x[1])}))
+# retl <- retl[-lnas]
+#Convert returned list to data frame
+retdf <- do.call('rbind',lapply(retl, "["))
+
+#Error tests
+errows <- which(dfc$transcript == 'uc003nug.3')
+#Check data against samuels
+#INDEL tests
+errows <- which(dfc$pos %in% c(22838574,22838574,65425591,65425591,65425591,
+                               6411935,6411935,7750181,7750217,56125173,
+                               88926752,113376139,109906342,76506685,72440684,
+                               72440684,72440684,71275799,72831385,72831385,
+                               42251612,34857318
+                               )) #INDEL tests
+#NON-SYNON tests
+errows <- which(dfc$pos %in%
+  c(1178857,26608828,26608828,26608828,26671690,34204914,37346379,119441725,
+    160681498,160681498,178863148,223940500,223940500,236906304,7179886,27306804,
+    29448410,47600974,67630622,102003522,118572361,148676144,170030590,191399378,
+    201507439,220334000,232087474,46724792,46724792,49405969,52853503,52853503,
+    75786753,107798991,107798991,184091213,184091213,184091213,184104344,
+    195594483,195594483,57180563,37186400,64887629,141019648,141019648,
+    147480955,147480955)) #NON-SYNON tests
+errows <- which(dfc$pos == c(7750181,7750217,42251612,56125173)) # + strand tests (still wrong)
+errows <- which(dfc$pos %in% c(102003522,179640609,191399378,220416300,42251612)) # - strand tests w/ one +
+errows <- which(dfc$pos %in% c(54605327,1019074,121733166,119349359,26699208,32007638,20780033))
+apply(dfc[errows,], MARGIN=1, FUN=function(x){splat(doRow)(x)})
+dfc[errows,c(1:8,16:19)]
+dfc[dfc$transcript=='uc011azh.2',c('exonstarts','exonends')]
+
+testres <-  apply(dfc[errows,], MARGIN=1, FUN=function(x){splat(doRowVerbose)(x)})
+testdf <- as.data.frame(do.call('rbind',lapply(testres, "[")))
+testdf <- testdf[!is.na(testdf$transcript),]
+testdf[,c(1:2,4,7:10)]
+
+dftest <- dfc[errows,]
+dftest$aaS <- apply(dfc[errows,], MARGIN=1, FUN=function(x){splat(doRow)(x)})
 
 ### Full Run ###
 dfbig <- dfc[,-which(colnames(dfc)=='seq')]
 dfbig$aaS <- apply(dfc, MARGIN=1, FUN=function(x){splat(doRow)(x)})
 
+### Remove NAs ###
+dfbig.i<-dfbig[!is.na(dfbig$aaS),]
+### Make Unique Peptides Set ###
+dupes <- duplicated(dfbig.i$aaS)
+dfbig.u <- dfbig.i[!dupes,]
 ################################################
 ###  Output Data                        #######
 ##############################################
-cols.out<-c(colnames(dfbig)[1:8],colnames(dfbig)[12:19])
-df.out<- dfbig[!is.na(dfbig$aaS),cols.out]
-### Output sorted and cleaned up data
-#reorder data frame so that columns of like classes are next to each other
-#character & Date, factor,logical, integer, numeric columns  
-# cls<- unlist( lapply(dfbig,class), use.names=FALSE )
-# ord <- c( grep('character',cls), grep('Date',cls), grep('factor',cls), grep('logical',cls),
-#           grep('integer',cls),grep('numeric',cls) )
-# dfc.o<-dfc[,ord]
-# rle(cls[ord])
+#Make AAStringSet
+aaOutputSet <- AAStringSet(dfbig.i$aaS)
+names(aaOutputSet)<-paste(dfbig.i$transcript,"leftflank",dfbig.i$leftflank)
+#Make Uniques AAStringSet
+aaUniqueSet <- AAStringSet(dfbig.u$aaS)
+names(aaUniqueSet)<-paste(dfbig.u$transcript,"leftflank",dfbig.u$leftflank)
 
-outfile<-file(description=paste(myOutDir,'GastricMutsToPeps.txt',sep=''),
+#write FASTA format output
+outname <- 'datasetGastric_FULL.fa'
+outfile <- paste(myOutDir,outname,sep='')
+write.XStringSet(aaOutputSet, filepath=outfile, append=FALSE, format="fasta")
+
+#write FASTA format output
+outname <- 'datasetGastric_Unique.fa'
+outfile <- paste(myOutDir,outname,sep='')
+write.XStringSet(aaUniqueSet, filepath=outfile, append=FALSE, format="fasta")
+
+
+### Output processed data frames ###
+cols.out<-c(colnames(dfbig.i)[1:8],colnames(dfbig.i)[13:19])
+df.out<- dfbig.i[,cols.out]
+#open connection
+outfile<-file(description=paste(myOutDir,'GastricMutsToPeps_FULL.txt',sep=''),
                  open='w', encoding='UTF-8', raw=FALSE)
 #write data
 write.table(x=df.out, file=outfile,append=FALSE,quote=FALSE,sep='\t',eol='\n',na='NA',
@@ -476,6 +599,34 @@ write.table(x=df.out, file=outfile,append=FALSE,quote=FALSE,sep='\t',eol='\n',na
 close(outfile)
 
 
+#select columns
+cols.out<-c(colnames(dfbig.u)[1:8],colnames(dfbig.u)[13:19])
+df.out<- dfbig.u[,cols.out]
+#open connection
+outfile<-file(description=paste(myOutDir,'GastricMutsToPeps_Unique.txt',sep=''),
+              open='w', encoding='UTF-8', raw=FALSE)
+#write data
+write.table(x=df.out, file=outfile,append=FALSE,quote=FALSE,sep='\t',eol='\n',na='NA',
+            dec='.', row.names=FALSE, col.names=TRUE, qmethod='escape')
+#close connection
+close(outfile)
+
+
+################################################################################
+#        Clean Up                                                       #######
+##############################################################################
+
+### REMOVE ALL OBJECTS ### 
+rm(list=ls(all=TRUE))
+
+### Detach Packages (reverse order from load) ###
+detach("package:reshape")
+detach("package:stringr")
+detach("package:plyr")
+detach("package:GenomicFeatures")
+detach("package:BSgenome.Hsapiens.UCSC.hg19")
+detach("package:BSgenome")
+detach("package:Biostrings")
 
 
 
