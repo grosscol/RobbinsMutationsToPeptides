@@ -227,7 +227,7 @@ doRow <- function(transcript,chr,leftflank,rightflank,
   }
   
   
-  #debug here
+  
   ###Make mutation and get mutant DNA!
   #Concatenation of [left side],[variant allele],[right side]
   lpmut <- mutTrnscrtDNAPosition - 1
@@ -488,6 +488,42 @@ dfc$var_allele[ins] <- substr(dfc$var_allele[ins],2,nchar(dfc$var_allele[ins]))
 #Set ref_allele to blank... since it is supposed to be blank
 dfc$ref_allele[ins] <- ''
 
+
+################################################################################
+###  CALCULATIONS                                                       #######
+##############################################################################
+
+#dfc is input data frame. 
+# Expected initial columns required:
+# transcript chrom strand txstart txend cdsstart cdsend exoncount
+# exonstarts exonends proteinid alignid seq ref_allele var_allele
+# leftflank rightflank
+
+#rename input data frame to "d" for the sake of brevity
+d <- dfc
+
+#InO(Intermediat Output)
+print(paste(length(d[,1]), "Rows total."))
+
+### 1 ### Check if mutation is outside of coding region
+d$noncoding <- d$leftflank < d$cdsstart || d$leftflank > d$cdsend
+# InO (Intermediate Output)
+print(paste(sum(d$noncoding),"Rows w/ leftflank outside cdsstart and cdsend:"))
+
+### 2 ### Check if mutation is inside an exon segment
+
+#Pass in list of starts, ends, and a position
+inExons <- function(exonstarts,exonends,leftflank){
+  max(which(leftflank >= unlist(exonstarts))) == min(which(leftflank <= unlist(exonends)))
+}
+#Apply the inExons() function to each row of the data frame
+#Use splat() instead of spelling out function arguments
+d$inexon<-apply(d[,c('exonstarts','exonends','leftflank')], MARGIN=1, FUN=splat(inExons))
+#InO
+print(paste(sum(d$inexon),"Rows w/ leftflank in exons."))
+
+### 3 ### Calculate length of mRNA sequence given in source data (UCSC lookup)
+d$seqlen <- nchar(d$seq)
 
 
 ################################################
