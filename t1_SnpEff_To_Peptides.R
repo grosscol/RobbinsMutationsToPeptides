@@ -501,20 +501,24 @@ dfc$ref_allele[ins] <- ''
 
 #rename input data frame to "d" for the sake of brevity
 d <- dfc
+d$seq <- NULL #seq column is superfluous
 
 #InO(Intermediat Output)
-print(paste(length(d[,1]), "Rows total."))
+print(paste(nrow(d), "Rows total."))
 
-### 1 ### Check if mutation is outside of coding region
-d$noncoding <- d$leftflank < d$cdsstart || d$leftflank > d$cdsend
+##########
+### 1  ### Check if mutation is outside of coding region
+##########
+d$noncoding <- d$leftflank < d$cdsstart | d$leftflank >= d$cdsend
 # InO (Intermediate Output)
 print(paste(sum(d$noncoding),"Rows w/ leftflank outside cdsstart and cdsend:"))
 
-### 2 ### Check if mutation is inside an exon segment
-
+##########
+### 2  ### Check if mutation is inside an exon segment
+##########
 #Pass in list of starts, ends, and a position
 inExons <- function(exonstarts,exonends,leftflank){
-  max(which(leftflank >= unlist(exonstarts))) == min(which(leftflank <= unlist(exonends)))
+  max(which(leftflank >= unlist(exonstarts))) == min(which(leftflank < unlist(exonends)))
 }
 #Apply the inExons() function to each row of the data frame
 #Use splat() instead of spelling out function arguments
@@ -522,9 +526,265 @@ d$inexon<-apply(d[,c('exonstarts','exonends','leftflank')], MARGIN=1, FUN=splat(
 #InO
 print(paste(sum(d$inexon),"Rows w/ leftflank in exons."))
 
-### 3 ### Calculate length of mRNA sequence given in source data (UCSC lookup)
-d$seqlen <- nchar(d$seq)
+##########
+### 3  ### Create criteria for further processing
+##########
+#mutation is in an exon and mutation within coding region
+L1crite <- d$inexon & !d$noncoding
+#InO
+print(paste(sum(L1crite),"Rows w/ leftflank in exons AND leftflank in coding region."))
 
+##########
+### 4  ### Calculate sum of exon lengths
+##########
+#requires lists of genomic positions of exonStarts and exonEnds
+sumExonLengths <- function(exonstarts,exonends){
+  #calculate array of exon lengths
+  exonlens <- exonends - exonstarts
+  #sum exon lengths
+  return(sum(exonlens))
+}
+#Apply the sumExonLengths() function to each row of the data frame
+#Use splat() instead of spelling out function arguments
+d$exonslen <- apply(d[,c('exonstarts','exonends')],MARGIN=1,FUN=splat(sumExonLengths))
+#InO
+print(paste(sum(is.na(d$exonslen)),"Rows w/ NA result of sum exon lengths."))
+
+##########
+### 5  ### Calculate exon in which coding begins
+##########
+getCodingStartExon <- function(exonstarts,cdsstart){
+  #highest start positon that is less than cdsstart positon
+  which(exonstarts == max(exonstarts[cdsstart >= exonstarts]) )
+}
+#Apply the getCodingExonStart() function to each row of the data frame
+#Use splat() instead of spelling out function arguments
+d$exCDS <- apply(d[,c('exonstarts','cdsstart')],MARGIN=1,FUN=splat(getCodingStartExon))
+
+
+##########
+### 5  ### Calculate exon in which coding begins
+##########
+getCodingEndExon <- function(exonends,cdsend){
+  #lowest end positon that is greater than cdsend positon
+  which(exonends == min(exonends[cdsend <= exonends]) )
+}
+#Apply the getCodingExonStart() function to each row of the data frame
+#Use splat() instead of spelling out function arguments
+d$exCDE <- apply(d[,c('exonends','cdsend')],MARGIN=1,FUN=splat(getCodingEndExon))
+
+##########
+### 6  ### Get starts for coding exons (as 1-based index)
+##########
+getCodingExonStarts <- function(exonstarts,exCDS,exCDE,cdsstart){
+  #exonstarts are 0 based. Add 1 to convert to 1-based position
+  ret<-exonstarts[exCDS:exCDE] + 1 
+  #replace first coding exon start with coding start (and + 1 for conversion)
+  ret[1] <- cdsstart + 1
+  ret
+}
+#Apply the function to each row of the data frame
+#Use splat() instead of spelling out function arguments
+d$codingStarts <- apply(d[,c('exonstarts','exCDS','exCDE','cdsstart')],
+                        MARGIN=1,FUN=splat(getCodingExonStarts))
+
+##########
+### 7  ### Get ends for coding exons.
+##########
+getCodingExonEnds <- function(exonends,exCDS,exCDE,cdsend){
+  #exonends are already 1-based position index.
+  ret<-exonends[exCDS:exCDE]
+  #replace last coding exon end with the coding end position (alredy 1-based)
+  ret[length(ret)]<-cdsend
+  ret
+}
+#Apply the function to each row of the data frame
+#Use splat() instead of spelling out function arguments
+d$codingEnds <- apply(d[,c('exonends','exCDS','exCDE','cdsend')],
+                      MARGIN=1,FUN=splat(getCodingExonEnds))
+
+###########################################################
+### Begin Using Criteria to Only Analyze Coding Mutants ###
+###########################################################
+#Use L1 criteria
+
+
+
+
+##########
+### 8  ### Get all the coding starts prior to mutation
+##########
+getPreMutCodingStarts <- function(codingStarts,leftflank){
+  codingStarts[codingStarts <= (leftflank+1)]
+}
+#Apply the function to each row of the data frame
+#Use splat() instead of spelling out function arguments
+d$premutstarts[L1crite] <- apply(d[L1crite, c('codingStarts','leftflank')],
+                        MARGIN=1, FUN=splat(getPreMutCodingStarts))
+
+##########
+### 9  ### Get all the coding ends prior to mutation (append mut here)
+##########
+getPreMutCodingEnds <- function(codingEnds,leftflank){
+  #Do not include the coding end if it is the mutation position.
+  ret <- codingEnds[codingEnds < (leftflank+1)]
+  #append mutation start position to this list
+  ret[length(ret)+1] <- leftflank+1
+  ret
+}
+#Apply the function to each row of the data frame
+#Use splat() instead of spelling out function arguments
+d$premutends[L1crite] <- apply(d[L1crite, c('codingEnds','leftflank')],
+                                MARGIN=1, FUN=splat(getPreMutCodingEnds))
+
+##########
+### 10 ### Check for mismatches between number of pre mutation starts and ends
+##########
+flagNumStartStops <- function(premutstarts,premutends){
+  length(premutstarts) != length(premutends)
+}
+d$flagMutSE[L1crite] <- apply(d[L1crite, c('premutstarts','premutends')],
+                             MARGIN=1, FUN=splat(flagNumStartStops))
+#InO
+print(paste(sum(d[L1crite,'flagMutSE']),
+            "ERROR flag(s) thrown from num of starts & stops mismatch."))
+
+##########
+### 11 ### Calculate the mutation position relative to the reference transcript
+##########
+getMutTrnscrtDNAPosition <- function(premutstarts,premutends){
+  #length calculations have to accomodated 1 based start (subtract 1 from each)
+  sum(premutends - (premutstarts - 1 ))
+}
+d$mutTrnscrtDNAPos[L1crite] <- apply(d[L1crite, c('premutstarts','premutends')],
+                            MARGIN=1, FUN=splat(getMutTrnscrtDNAPosition))
+
+
+##########
+### 12 ### Get transcript reference DNA from UCSC genome
+##########
+getTranscriptDNA <- function(codingStarts,codingEnds,chrom){
+  dnas <- DNAStringSet(unmasked(Hsapiens[[chrom]]), 
+                       start=as.vector(codingStarts), end=as.vector(codingEnds) )
+  #unlist the segements to create a single transcript
+  dnas <- unlist(dnas)
+}
+#get start time
+start.time <- Sys.time()
+#Apply the function to each row of the data frame
+#Use splat() instead of spelling out function arguments
+d$trnscrtDNA[L1crite] <- apply(d[L1crite,c('codingStarts','codingEnds','chrom')],
+                               MARGIN=1,FUN=splat(getTranscriptDNA))
+#compute run duration
+dur <- Sys.time() - start.time
+#InO
+print(paste(dur,attr(dur,'units'),"required to do reference DNA lookup."))
+
+##########
+### 13 ### Calculate mutatant amino acid position
+##########
+#do for '+' strand genes
+crite <- L1crite & d$strand=='+'
+d$mutAAPos[crite] <- ceiling(d$mutTrnscrtDNAPos[crite] / 3)
+#do for '-' strand genes
+crite <- L1crite & d$strand=='-'
+d$mutAAPos[crite] <- 
+  (length(d$trnscrtDNA[crite])/3) - (ceiling(d$mutTrnscrtDNAPos[crite]/3)) + 1
+
+#do adjustment (+1) for insertions at start of codon '+' strand genes
+crite <- L1crite & d$strand=='+' & d$ref_allele == '' & (d$mutTrnscrtDNAPos %% 3 == 0)
+d$mutAAPos[crite] <- d$mutAAPos[crite] + 1
+
+#do adjustment (+1) for insertions at start of codon '-' strand genes
+crite <- L1crite & d$strand=='-' & d$ref_allele == '' & 
+  ((length(d$trnscrtDNA[crite]) - d$mutTrnscrtDNAPos[crite]+1) %% 3 == 0)
+d$mutAAPos[crite] <- d$mutAAPos[crite] + 1
+  
+##########
+### 14 ### Make mutation and store mutant sequence
+##########
+getMutantRefDNA <- function(trnscrtDNA,lpmut,rpmut,var_allele){
+  #Concatenation of [left side],[variant allele],[right side]
+    xscat(
+    substr(trnscrtDNA, 1, lpmut), 
+    DNAString(var_allele), 
+    substr(trnscrtDNA, rpmut, length(trnscrtDNA))
+    )
+}
+#calculate left and right sides of variant sequence
+d$lpmut[L1crite] <- d$mutTrnscrtDNAPos[L1crite] - 1
+d$rpmut[L1crite] <- d$mutTrnscrtDNAPos[L1crite] + nchar(d$ref_allele[L1crite])
+#get start time
+start.time <- Sys.time()
+#Apply the function to each row of the data frame
+#Use splat() instead of spelling out function arguments
+d$mutTrnscrtDNA[L1crite] <- apply(d[L1crite,c('trnscrtDNA','lpmut','rpmut','var_allele')],
+                               MARGIN=1,FUN=splat(getMutantRefDNA))
+#compute run duration
+dur <- Sys.time() - start.time
+#InO
+print(paste(dur,attr(dur,'units'),"required to do concatenate mutant ref DNA."))
+
+##########
+### 15 ### Do translations. Not elegant, but ham handed works.
+##########
+#get start time
+start.time <- Sys.time()
+#translate normal '+' strand genes
+crite <- L1crite & d$strand=='+'
+d$aanorm[crite] <- sapply(d$trnscrtDNA[crite],
+                          FUN=function(x){translate(dna2rna(x))})
+#translate normal '-' strand genes
+crite <- L1crite & d$strand=='-'
+d$aanorm[crite] <- sapply(d$trnscrtDNA[crite],
+                          FUN=function(x){translate(dna2rna(reverseComplement(x)))})
+#translate mutant '+' strand genes
+crite <- L1crite & d$strand=='+'
+d$aamut[crite] <- sapply(d$mutTrnscrtDNA[crite],
+                          FUN=function(x){translate(dna2rna(x))})
+#translate mutant '-' strand genes
+crite <- L1crite & d$strand=='-'
+d$aamut[crite] <- sapply(d$mutTrnscrtDNA[crite],
+                          FUN=function(x){translate(dna2rna(reverseComplement(x)))})
+#compute run duration
+dur <- Sys.time() - start.time
+#InO
+print(paste(dur,attr(dur,'units'),"required to do transcription & translation of all ref DNA."))
+
+
+##########
+### 15 ### Check if variant amino acid is a stop.
+##########
+isMutAAstop <- function(aamut, mutAAPos){
+  cat(length(aamut),mutAAPos)
+  aamut[mutAAPos] == AAString("*")
+}
+#Apply the function to each row of the data frame
+#Use splat() instead of spelling out function arguments
+d$isTrunc[L1crite] <- apply(d[L1crite,c('aamut','mutAAPos')],
+                                  MARGIN=1,FUN=splat(isMutAAstop))
+#debug
+
+
+
+errorcrite <- L1crite &  (length(d$aamut) < d$mutAAPos)
+smdf <- d[L1crite,]
+cols<-c(1,29,31)
+errors <- smdf[smdf$mutAAPos > length(smdf$aamut),]
+errors$mutAAPos > length(errors$aamut)
+errors[,cols]
+
+sapply(errors$mutTrnscrtDNA, length)
+sapply(errors$aanorm, length)
+sapply(errors$aamut,length)
+errors$mutAAPos
+errors$mutTrnscrtDNAPos
+errors$mutTrnscrtDNAPos/3
+errors$strand
+
+smdf$aamut[[307]]
+smdf$mutAAPos[[307]]
+smdf$strand[[307]]
 
 ################################################
 ###  Output Intermediate Calculations   #######
