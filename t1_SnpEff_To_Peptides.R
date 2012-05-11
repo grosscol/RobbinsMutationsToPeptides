@@ -683,23 +683,33 @@ print(paste(dur,attr(dur,'units'),"required to do reference DNA lookup."))
 ##########
 ### 13 ### Calculate mutatant amino acid position
 ##########
-#do for '+' strand genes
-crite <- L1crite & d$strand=='+'
-d$mutAAPos[crite] <- ceiling(d$mutTrnscrtDNAPos[crite] / 3)
-#do for '-' strand genes
-crite <- L1crite & d$strand=='-'
-d$mutAAPos[crite] <- 
-  (length(d$trnscrtDNA[crite])/3) - (ceiling(d$mutTrnscrtDNAPos[crite]/3)) + 1
+getMutAAPosition <- function(mutTrnscrtDNAPos,strand,trnscrtDNA){
+  if(strand=='+'){
+    ret <- ceiling(mutTrnscrtDNAPos / 3)
+  }else{
+    ret <- (length(trnscrtDNA)/3) - (ceiling(mutTrnscrtDNAPos/3)) + 1
+  }
+  ret
+}
+#Apply the function to each row of the data frame
+#Use splat() instead of spelling out function arguments
+d$mutAAPos[L1crite] <- apply(d[L1crite,c('mutTrnscrtDNAPos','strand','trnscrtDNA')],
+                               MARGIN=1,FUN=splat(getMutAAPosition))
 
 #do adjustment (+1) for insertions at start of codon '+' strand genes
 crite <- L1crite & d$strand=='+' & d$ref_allele == '' & (d$mutTrnscrtDNAPos %% 3 == 0)
 d$mutAAPos[crite] <- d$mutAAPos[crite] + 1
+#InO
+print(sum(crite),"insertions at start of codon on '+' strand genes")
 
 #do adjustment (+1) for insertions at start of codon '-' strand genes
 crite <- L1crite & d$strand=='-' & d$ref_allele == '' & 
   ((length(d$trnscrtDNA[crite]) - d$mutTrnscrtDNAPos[crite]+1) %% 3 == 0)
 d$mutAAPos[crite] <- d$mutAAPos[crite] + 1
-  
+#InO
+print(sum(crite),"insertions at start of codon on '-' strand genes")
+
+
 ##########
 ### 14 ### Make mutation and store mutant sequence
 ##########
@@ -756,35 +766,121 @@ print(paste(dur,attr(dur,'units'),"required to do transcription & translation of
 ### 15 ### Check if variant amino acid is a stop.
 ##########
 isMutAAstop <- function(aamut, mutAAPos){
-  cat(length(aamut),mutAAPos)
+  #Check for edge/error cases
+  if(mutAAPos > length(aamut)){
+    cat(length(aamut),mutAAPos,'; ')
+    return(NA)
+  }
   aamut[mutAAPos] == AAString("*")
 }
 #Apply the function to each row of the data frame
 #Use splat() instead of spelling out function arguments
 d$isTrunc[L1crite] <- apply(d[L1crite,c('aamut','mutAAPos')],
                                   MARGIN=1,FUN=splat(isMutAAstop))
-#debug
+#InO
+print(paste(sum(d$isTrunc[L1crite & !is.na(d$isTrunc)]),
+            "cases with mutant AA position is stop. Truncatation"))
+print(paste(sum(is.na(d$isTrunc[L1crite])),
+            "cases with mutant AA position > length mutant peptide."))
+#For the time being, flag these as truncated. (TODO: Handle these cases)
+crite <- is.na(d$isTrunc) & L1crite
+d$isTrunc[crite] <- TRUE
+
+###########################################################
+### Add Truncation to Coding Criteria and Apply to      ###
+###  Subsequent Analysis                                ###
+###########################################################
+L2crite <- L1crite & !d$isTrunc
+#Convert NA to false
+L2crite[is.na(L2crite)] <- FALSE
+#Use L2 criteria
+
+
+##########
+### 16 ### Check variant peptide against normal peptide
+##########
+isSynonymousMutation <- function(mutAAPos,aamut,aanorm){
+  aamut[mutAAPos:length(aamut)] == aanorm[mutAAPos:length(aanorm)]
+}
+#Apply the function to each row of the data frame
+#Use splat() instead of spelling out function arguments
+d$isSynon[L2crite] <- apply(d[L2crite,c('aanorm','aamut','mutAAPos')],
+                            MARGIN=1,FUN=splat(isSynonymousMutation))
+#InO
+print(paste(sum(d$isSynon[L2crite]),"Synonymous mutations flagged."))
+print(paste(sum(!d$isSynon[L2crite]),"Non-Synonymous mutations."))
+
+###########################################################
+### Switch to Non-Synonymous Mutation Criteria          ###
+###  for Subsequent Analysis                            ###
+###########################################################
+L3crite <- !d$isSynon
+#Convert NA to false
+L3crite[is.na(L3crite)] <- FALSE
+#Use L2 criteria
+
+##########
+### 17 ### Calculate report cut length to left of variant AA
+##########
+#default to position 1
+d$lareport[L3crite] <- 1
+#for those with a mutation position > 10, report 10 AA to left of variant
+crite <- d$mutAAPos > 10 & L3crite
+d$lareport[crite] <- d$mutAAPos[crite] - 10
+
+##########
+### 18 ### Calculate report cut length to left of variant AA
+##########
+#Calc length of mutant amino acid sequence (aamut)
+d$lenAAMut[L3crite] <- sapply(d$aamut[L3crite],length)
+#default to end position
+d$rareport[L3crite] <- d$lenAAMut[L3crite]
+
+crite <- (d$lenAAMut - d$mutAAPos) > 10 & L3crite
+d$rareport[crite] <- d$mutAAPos[crite] + 10
+
+##########
+### 19 ### Check for frame shift
+##########
+#Create criteria to identify relevant frame shift mutations
+FScrite <- (nchar(d$var_allele) != nchar(d$ref_allele)) & 
+  ( (nchar(d$var_allele)-nchar(d$ref_allele))%%3 !=0 ) & L3crite
+#InO
+print(paste(sum(crite),"Non-synonymous frame shift mutations flagged."))
+
+##########
+### 20 ### Recalculate right amino acid report cut length
+##########
+getNewRightAAReport <- function(aamut){
+  #dangerously assuming first stop codon found will be beyond mut position
+  stoppos <- regexpr('\\*',aamut)
+  if(stoppos == -1){
+    #no stop codon found.  TODO:translate into 3'UTR ?
+    #FLAG using NA
+    return(NA)
+  }else{
+    #set cut position to 1 before first stop codon
+    return(stoppos[1]-1)
+  }
+}
+#Apply the function to each row of the data frame
+#Use splat() instead of spelling out function arguments
+d$isSynon[FScrite] <- apply(d[FScrite,c('aanorm','aamut','mutAAPos')],
+                            MARGIN=1,FUN=splat(isSynonymousMutation))
+
+##########
+### 21 ### Cut the mutant peptide and store result for reporting
+##########
+getMutantAAReportSequence <- function(aamut,lareport,rareport){
+  subseq(aamut,start=lareport,end=rareport)
+}
+#Apply the function to each row of the data frame
+#Use splat() instead of spelling out function arguments
+d$mutaaReport[L3crite] <- apply(d[L3crite,c('aamut','lareport','rareport')],
+                            MARGIN=1,FUN=splat(getMutantAAReportSequence))
 
 
 
-errorcrite <- L1crite &  (length(d$aamut) < d$mutAAPos)
-smdf <- d[L1crite,]
-cols<-c(1,29,31)
-errors <- smdf[smdf$mutAAPos > length(smdf$aamut),]
-errors$mutAAPos > length(errors$aamut)
-errors[,cols]
-
-sapply(errors$mutTrnscrtDNA, length)
-sapply(errors$aanorm, length)
-sapply(errors$aamut,length)
-errors$mutAAPos
-errors$mutTrnscrtDNAPos
-errors$mutTrnscrtDNAPos/3
-errors$strand
-
-smdf$aamut[[307]]
-smdf$mutAAPos[[307]]
-smdf$strand[[307]]
 
 ################################################
 ###  Output Intermediate Calculations   #######
