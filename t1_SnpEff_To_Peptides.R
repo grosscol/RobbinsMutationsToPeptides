@@ -260,6 +260,10 @@ d$codingEnds <- apply(d[,c('exonends','exCDS','exCDE','cdsend')],
 ###########################################################
 #Use L1 criteria
 
+                  MARGIN=1,FUN=splat(modifyCodingEnds))
+
+
+
 ##########
 ### 8  ### Get all the coding starts prior to mutation
 ##########
@@ -313,8 +317,6 @@ d$mutTrnscrtDNAPos[L1crite] <- apply(d[L1crite, c('premutstarts','premutends')],
 ### 12 ### Get transcript reference DNA from UCSC genome
 ##########
 getTranscriptDNA <- function(codingStarts,codingEnds,chrom){
-  #Add three to the last coding end in order to include stop codon
-  codingEnds[length(codingEnds)] <- codingEnds[length(codingEnds)] + 3
   dnas <- DNAStringSet(unmasked(Hsapiens[[chrom]]), 
                        start=as.vector(codingStarts), end=as.vector(codingEnds) )
   #unlist the segements to create a single transcript
@@ -414,7 +416,7 @@ print(paste(dur,attr(dur,'units'),"required to do transcription & translation of
 
 
 ##########
-### 15 ### Check if variant amino acid is a stop.
+### 16 ### Check if variant amino acid is a stop.
 ##########
 isMutAAstop <- function(aamut, mutAAPos){
   #Check for edge/error cases
@@ -448,7 +450,7 @@ L2crite[is.na(L2crite)] <- FALSE
 
 
 ##########
-### 16 ### Check variant peptide against normal peptide
+### 17 ### Check variant peptide against normal peptide
 ##########
 isSynonymousMutation <- function(mutAAPos,aamut,aanorm){
   aamut[mutAAPos:length(aamut)] == aanorm[mutAAPos:length(aanorm)]
@@ -471,7 +473,7 @@ L3crite[is.na(L3crite)] <- FALSE
 #Use L2 criteria
 
 ##########
-### 17 ### Calculate report cut length to left of variant AA
+### 18 ### Calculate report cut length to left of variant AA
 ##########
 #default to position 1
 d$lareport[L3crite] <- 1
@@ -480,7 +482,7 @@ crite <- d$mutAAPos > 10 & L3crite
 d$lareport[crite] <- d$mutAAPos[crite] - 10
 
 ##########
-### 18 ### Calculate report cut length to left of variant AA
+### 19 ### Calculate report cut length to left of variant AA
 ##########
 #Calc length of mutant amino acid sequence (aamut)
 d$lenAAMut[L3crite] <- sapply(d$aamut[L3crite],length)
@@ -491,7 +493,7 @@ crite <- (d$lenAAMut - d$mutAAPos) > 10 & L3crite
 d$rareport[crite] <- d$mutAAPos[crite] + 10
 
 ##########
-### 19 ### Check for frame shift
+### 20 ### Check for frame shift
 ##########
 #Create criteria to identify relevant frame shift mutations
 FScrite <- (nchar(d$var_allele) != nchar(d$ref_allele)) & 
@@ -500,15 +502,15 @@ FScrite <- (nchar(d$var_allele) != nchar(d$ref_allele)) &
 print(paste(sum(crite),"Non-synonymous frame shift mutations flagged."))
 
 ##########
-### 20 ### Recalculate right amino acid report cut length
+### 21 ### Recalculate right amino acid report cut length
 ##########
-getNewRightAAReport <- function(aamut){
+getNewRightAAReport <- function(aamut, rareport){
   #dangerously assuming first stop codon found will be beyond mut position
   stoppos <- regexpr('\\*',aamut)
   if(stoppos == -1){
     #no stop codon found.  TODO:translate into 3'UTR ?
-    #FLAG using NA
-    return(NA)
+    #FLAG using -1
+    return(stoppos)
   }else{
     #Cut at the star (will include the '*')
     return(stoppos[1])
@@ -518,11 +520,15 @@ getNewRightAAReport <- function(aamut){
 }
 #Apply the function to each row of the data frame
 #Use splat() instead of spelling out function arguments
-d$isSynon[FScrite] <- apply(d[FScrite,c('aanorm','aamut','mutAAPos')],
-                            MARGIN=1,FUN=splat(isSynonymousMutation))
+d$rareport[FScrite] <- apply(d[FScrite,c('aamut','rareport')],
+                            MARGIN=1,FUN=splat(getNewRightAAReport))
+#Flag stop loss and set rareport to end of transcript
+d$isStopLoss <- FALSE
+d$isStopLoss[which(d$rareport==-1)] <- TRUE
+
 
 ##########
-### 21 ### Cut the mutant peptide and store result for reporting
+### 22 ### Cut the mutant peptide and store result for reporting
 ##########
 getMutantAAReportSequence <- function(aamut,lareport,rareport){
   subseq(aamut,start=lareport,end=rareport)
@@ -535,8 +541,10 @@ d$mutaaReport[L3crite] <- apply(d[L3crite,c('aamut','lareport','rareport')],
 #InO
 print(paste(sum(L3crite),"reported mutant amino acid sequences"))
 
+
+
 ##########
-### 22 ### Make small subset of unique mutant peptides
+### 23 ### Make small subset of unique mutant peptides
 ##########
 #dupes <- duplicated(sapply(d$mutaaReport[L3crite],as.character))
 
@@ -545,8 +553,21 @@ print(paste(sum(L3crite),"reported mutant amino acid sequences"))
 ################################################
 ###  Output Result of    Calculations   #######
 ##############################################
-#Copy data frame for ouptup
+#Copy data frame for output
 d.o <- d
+
+#debug compare old and new
+dnew <-  sapply(d.o$aanorm[L3crite],as.character)
+dold <-  sapply(d$aanorm[L3crite],as.character)
+
+
+dold <-  sapply(dold, function(x){substr(x, nchar(x)-10,nchar(x)) })
+dnew <-  sapply(dnew, function(x){substr(x, nchar(x)-11,nchar(x)) })
+
+comp<-data.frame(oldAAPos=d$mutAAPos[L3crite], newAAPoss=d.o$mutAAPos[L3crite],
+                 strand=d$strand[L3crite],aaOld=dold,aaNew=dnew,row.names=NULL)
+View(comp)
+View(unname(cbind(dold,dnew)))
 
 #Convert Biostrings to regular character strings
 d.o$trnscrtDNA <- sapply(d.o$trnscrtDNA,as.character)
@@ -575,8 +596,42 @@ detach("package:Biostrings")
 
 
 
+################################################################################
+#        Scrap Code                                                     #######
+##############################################################################
 
-
+# #Include these just before "Get all the coding starts prior to mutation"  
+# #to add 3 nucleotides to the 3' end of the resulting mrna transcript
+# ##########
+# ### NEW ## Modify coding starts of minus strand genes to include stop codon 
+# ##########
+# modifyCodingStarts <- function(codingStarts,strand){
+#   #replace first coding start with location 3 towards the 5' end.
+#   #will force inclusion of stop codon for minus strand genes.
+#   codingStarts[1] <- codingStarts[1] - 3
+#   codingStarts
+# }
+# #Need to ensure that normal stop codon is included in sequence for (-) genes
+# crite <- d$strand=='-' & L1crite
+# #Apply the function to each row of the data frame
+# #Use splat() instead of spelling out function arguments
+# d$codingStarts[crite] <- apply(d[crite,c('codingStarts','strand')],
+#                         MARGIN=1,FUN=splat(modifyCodingStarts))
+# 
+# ##########
+# ### NEW ## Modify coding ends of plus strand genes to include stop codon 
+# ##########
+# modifyCodingEnds <- function(codingEnds,strand){
+#   #replace first coding start with location 3 towards the 5' end.
+#   #will force inclusion of stop codon for minus strand genes.
+#   codingEnds[length(codingEnds)] <- codingEnds[length(codingEnds)] + 3
+#   codingEnds
+# }
+# #Need to ensure that normal stop codon is included in sequence for (+) genes
+# crite <- d$strand=='+' & L1crite
+# #Apply the function to each row of the data frame
+# #Use splat() instead of spelling out function arguments
+# d$codingEnds[crite] <- apply(d[crite,c('codingEnds','strand')],
 
 
 
