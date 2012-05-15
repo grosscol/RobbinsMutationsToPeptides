@@ -42,6 +42,18 @@ library("reshape")
 #        MAIN                                                                  #
 ################################################################################
 
+#############
+# Function  #
+#   Defs    #
+#############
+
+#helper function will be nested inside of an lapply or sapply call
+#take string of digitis separated by commas, return list of integers.
+digitStringToArray <- function(x){
+  ret<-lapply(str_extract_all(x,'\\d+'),FUN=as.integer, names=NULL)
+  unname(ret)
+}
+
 
 ################################################
 ###  Import Data                        #######
@@ -92,7 +104,6 @@ dfc <- plyr::rename(dfc, c("var" = "var_allele", "ref" = "ref_allele") )
 #Parse strings of digits separated by commas to array of integers
 dfc$exonstarts<-unname(sapply(dfc$exonstarts, FUN=digitStringToArray))
 dfc$exonends<-unname(sapply(dfc$exonends, FUN=digitStringToArray))
-
 
 ### CALCULATE LEFTFLANK AND RIGHTFLANK ###
 
@@ -527,7 +538,7 @@ print(paste(sum(L3crite),"reported mutant amino acid sequences"))
 ##########
 ### 22 ### Make small subset of unique mutant peptides
 ##########
-dupes <- duplicated(sapply(d$mutaaReport[L3crite],as.character))
+#dupes <- duplicated(sapply(d$mutaaReport[L3crite],as.character))
 
 
 
@@ -536,6 +547,7 @@ dupes <- duplicated(sapply(d$mutaaReport[L3crite],as.character))
 ##############################################
 #Copy data frame for ouptup
 d.o <- d
+
 #Convert Biostrings to regular character strings
 d.o$trnscrtDNA <- sapply(d.o$trnscrtDNA,as.character)
 d.o$mutTrnscrtDNA <- sapply(d.o$mutTrnscrtDNA,as.character)
@@ -543,8 +555,6 @@ d.o$aanorm <- sapply(d.o$aanorm,as.character)
 d.o$aamut <- sapply(d.o$aamut,as.character)
 d.o$mutaaReport <- sapply(d.o$mutaaReport,as.character)
 View(d.o[L3crite & d.o$transcript=='uc003lli.3',c(1,3,15,16,42,35,36)])
-
-
 
 
 ################################################################################
