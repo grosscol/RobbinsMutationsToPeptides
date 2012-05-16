@@ -260,7 +260,7 @@ d$codingEnds <- apply(d[,c('exonends','exCDS','exCDE','cdsend')],
 ###########################################################
 #Use L1 criteria
 
-                  MARGIN=1,FUN=splat(modifyCodingEnds))
+
 
 
 
@@ -387,6 +387,12 @@ d$mutTrnscrtDNA[L1crite] <- apply(d[L1crite,c('trnscrtDNA','lpmut','rpmut','var_
 dur <- Sys.time() - start.time
 #InO
 print(paste(dur,attr(dur,'units'),"required to do concatenate mutant ref DNA."))
+
+##########
+### 14b ### Store mutant DNA transcript length
+##########
+d$mutTrnscrtDNAlen[L1crite] <- length(d$mutTrnscrtDNA[L1crite])
+d$var_allele_len[L1crite] <- nchar(d$var_allele[L1crite])
 
 ##########
 ### 15 ### Do translations. Not elegant, but ham handed works.
@@ -522,10 +528,11 @@ getNewRightAAReport <- function(aamut, rareport){
 #Use splat() instead of spelling out function arguments
 d$rareport[FScrite] <- apply(d[FScrite,c('aamut','rareport')],
                             MARGIN=1,FUN=splat(getNewRightAAReport))
-#Flag stop loss and set rareport to end of transcript
-d$isStopLoss <- FALSE
-d$isStopLoss[which(d$rareport==-1)] <- TRUE
-
+#Flag no stop found
+d$noStop <- FALSE
+d$noStop[which(d$rareport==-1)] <- TRUE
+#Set right reporting end to end of peptide
+d$rareport[d$noStop] <- d$lenAAMut[d$noStop]
 
 ##########
 ### 22 ### Cut the mutant peptide and store result for reporting
@@ -541,14 +548,44 @@ d$mutaaReport[L3crite] <- apply(d[L3crite,c('aamut','lareport','rareport')],
 #InO
 print(paste(sum(L3crite),"reported mutant amino acid sequences"))
 
-
-
 ##########
-### 23 ### Make small subset of unique mutant peptides
+### 23 ### Get +/- 150 nt from the mutation flanks 
 ##########
-#dupes <- duplicated(sapply(d$mutaaReport[L3crite],as.character))
+getTranscriptLeftOfMut <- function(leftnt, mutTrnscrtDNAPos, mutTrnscrtDNA){
+  if(mutTrnscrtDNAPos==1){ret <- DNAString('')}
+  else{
+    e <- mutTrnscrtDNAPos - 1
+    ret <- substr(mutTrnscrtDNA, start=leftnt, stop=e)
+  }
+  ret
+} 
+
+getTrnascriptRightOfMut <- function(rightnt, mutTrnscrtDNAPos, var_allele_len, mutTrnscrtDNA){
+  if(mutTrnscrtDNAPos+var_allele_len >=length(mutTrnscrtDNA)){ret <- DNAString('')}
+  else{
+    s <- mutTrnscrtDNAPos+var_allele_len
+    ret <- substr(mutTrnscrtDNAPos, start=s, stop=rightnt )
+  }
+  ret
+}
 
 
+#calc left and right ends (check if enough space)
+d$leftnt[L3crite] <- ifelse(d$mutTrnscrtDNAPos[L3crite] > 150,
+                   d$mutTrnscrtDNAPos[L3crite] - 150,
+                   1 )
+d$rightnt[L3crite] <- 
+  ifelse(d$mutTrnscrtDNAlen[L3crite] - (d$mutTrnscrtDNAPos[L3crite] + d$var_allele_len[L3crite] ) > 150,
+         d$mutTrnscrtDNAPos[L3crite] + d$var_allele_len[L3crite] +  150,
+         d$mutTrnscrtDNAlen[L3crite] )  
+
+#Apply the function to each row of the data frame
+#Use splat() instead of spelling out function arguments
+d$leftTrnscrptDNA[L3crite] <- apply(d[L3crite,c('leftnt','mutTrnscrtDNAPos','mutTrnscrtDNA')],
+                                  MARGIN=1,FUN=splat(getTranscriptLeftOfMut))
+
+d$rightTrnscrptDNA[L3crite] <- apply(d[L3crite,c('rightnt','mutTrnscrtDNAPos','var_allele_len','mutTrnscrtDNA')],
+                                    MARGIN=1,FUN=splat(getTrnascriptRightOfMut))
 
 ################################################
 ###  Output Result of    Calculations   #######
@@ -556,18 +593,6 @@ print(paste(sum(L3crite),"reported mutant amino acid sequences"))
 #Copy data frame for output
 d.o <- d
 
-#debug compare old and new
-dnew <-  sapply(d.o$aanorm[L3crite],as.character)
-dold <-  sapply(d$aanorm[L3crite],as.character)
-
-
-dold <-  sapply(dold, function(x){substr(x, nchar(x)-10,nchar(x)) })
-dnew <-  sapply(dnew, function(x){substr(x, nchar(x)-11,nchar(x)) })
-
-comp<-data.frame(oldAAPos=d$mutAAPos[L3crite], newAAPoss=d.o$mutAAPos[L3crite],
-                 strand=d$strand[L3crite],aaOld=dold,aaNew=dnew,row.names=NULL)
-View(comp)
-View(unname(cbind(dold,dnew)))
 
 #Convert Biostrings to regular character strings
 d.o$trnscrtDNA <- sapply(d.o$trnscrtDNA,as.character)
@@ -632,6 +657,7 @@ detach("package:Biostrings")
 # #Apply the function to each row of the data frame
 # #Use splat() instead of spelling out function arguments
 # d$codingEnds[crite] <- apply(d[crite,c('codingEnds','strand')],
+#                       MARGIN=1,FUN=splat(modifyCodingEnds))
 
 
 
