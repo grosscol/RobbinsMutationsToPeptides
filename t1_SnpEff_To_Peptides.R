@@ -54,9 +54,7 @@ digitStringToArray <- function(x){
   unname(ret)
 }
 
-arrayToDigitString <- function(x){
-  ret <- paste(x, sep=' ')
-}
+
 
 ################################################
 ###  Import Data                        #######
@@ -147,6 +145,15 @@ dfc$ref_allele[ins] <- ''
 ################################################################################
 ###  CALCULATIONS                                                       #######
 ##############################################################################
+#begin output sink
+sink(paste(myOutDir,"mutsToPeps_AnalysisSink.txt", sep=""),type = c("output", "message"))
+print("Beginning Mutations to Peptides Analysis")
+print(infile)
+
+##########
+### 0  ### Record Start Time
+##########
+analsis.start <- Sys.time()
 
 #dfc is input data frame. 
 # Expected initial columns required:
@@ -262,10 +269,6 @@ d$codingEnds <- apply(d[,c('exonends','exCDS','exCDE','cdsend')],
 ### Begin Using Criteria to Only Analyze Coding Mutants ###
 ###########################################################
 #Use L1 criteria
-
-
-
-
 
 ##########
 ### 8  ### Get all the coding starts prior to mutation
@@ -394,7 +397,7 @@ print(paste(dur,attr(dur,'units'),"required to do concatenate mutant ref DNA."))
 ##########
 ### 14b ### Store mutant DNA transcript length
 ##########
-d$mutTrnscrtDNAlen[L1crite] <- length(d$mutTrnscrtDNA[L1crite])
+d$mutTrnscrtDNAlen[L1crite] <- sapply(d$mutTrnscrtDNA[L1crite], length)
 d$var_allele_len[L1crite] <- nchar(d$var_allele[L1crite])
 
 ##########
@@ -555,7 +558,10 @@ print(paste(sum(L3crite),"reported mutant amino acid sequences"))
 ### 23 ### Get +/- 150 nt from the mutation flanks 
 ##########
 getTranscriptLeftOfMut <- function(leftnt, mutTrnscrtDNAPos, mutTrnscrtDNA){
-  if(mutTrnscrtDNAPos==1){ret <- DNAString('')}
+  mutTrnscrtDNA <- as.character(mutTrnscrtDNA)
+  if(mutTrnscrtDNAPos==1){
+    ret <- ''
+    }
   else{
     e <- mutTrnscrtDNAPos - 1
     ret <- substr(mutTrnscrtDNA, start=leftnt, stop=e)
@@ -564,17 +570,20 @@ getTranscriptLeftOfMut <- function(leftnt, mutTrnscrtDNAPos, mutTrnscrtDNA){
 } 
 
 getTrnascriptRightOfMut <- function(rightnt, mutTrnscrtDNAPos, var_allele_len, mutTrnscrtDNA){
-  if(mutTrnscrtDNAPos+var_allele_len >=length(mutTrnscrtDNA)){ret <- DNAString('')}
+  mutTrnscrtDNA <- as.character(mutTrnscrtDNA)
+  if(mutTrnscrtDNAPos+var_allele_len >= nchar(mutTrnscrtDNA)){
+    ret <- ''
+    }
   else{
     s <- mutTrnscrtDNAPos+var_allele_len
-    ret <- substr(mutTrnscrtDNAPos, start=s, stop=rightnt )
+    ret <- substr(mutTrnscrtDNA, start=s, stop=rightnt )    
   }
   ret
 }
 
 #calc left and right ends (check if enough space)
 d$leftnt[L3crite] <- ifelse(d$mutTrnscrtDNAPos[L3crite] > 150,
-                   d$mutTrnscrtDNAPos[L3crite] - 150,
+                   unlist(d$mutTrnscrtDNAPos[L3crite]) - 150,
                    1 )
 d$rightnt[L3crite] <- 
   ifelse(d$mutTrnscrtDNAlen[L3crite] - (d$mutTrnscrtDNAPos[L3crite] + d$var_allele_len[L3crite] ) > 150,
@@ -589,16 +598,23 @@ d$leftTrnscrptDNA[L3crite] <- apply(d[L3crite,c('leftnt','mutTrnscrtDNAPos','mut
 d$rightTrnscrptDNA[L3crite] <- apply(d[L3crite,c('rightnt','mutTrnscrtDNAPos','var_allele_len','mutTrnscrtDNA')],
                                     MARGIN=1,FUN=splat(getTrnascriptRightOfMut))
 
+
+
 ################################################
 ###  Output Result of    Calculations   #######
 ##############################################
+#Fill in 
+
 #Append level criteria to data frame:
 d$L1crite <- L1crite
 d$L2crite <- L2crite
 d$L3crite <- L3crite
+d$FScrite <- FScrite
 
 #Copy data frame for output
 d.o <- d
+
+#Fill in Nulls
 
 #Convert Biostrings to regular character strings
 d.o$trnscrtDNA       <- sapply(d.o$trnscrtDNA,       as.character)
@@ -609,13 +625,31 @@ d.o$mutaaReport      <- sapply(d.o$mutaaReport,      as.character)
 d.o$leftTrnscrptDNA  <- sapply(d.o$leftTrnscrptDNA,  as.character)
 d.o$rightTrnscrptDNA <- sapply(d.o$rightTrnscrptDNA, as.character)
 
+#Replace character(0) with ''
+replaceCharZero <- function(x){
+  if( identical(x,character(0)) ){
+    ret <- ''
+  }else{
+    ret <- x
+  }
+  ret
+}
+
+d.o$trnscrtDNA       <- sapply(d.o$trnscrtDNA,       replaceCharZero)
+d.o$mutTrnscrtDNA    <- sapply(d.o$mutTrnscrtDNA,    replaceCharZero)
+d.o$aanorm           <- sapply(d.o$aanorm,           replaceCharZero)
+d.o$aamut            <- sapply(d.o$aamut,            replaceCharZero)
+d.o$mutaaReport      <- sapply(d.o$mutaaReport,      replaceCharZero)
+d.o$leftTrnscrptDNA  <- sapply(d.o$leftTrnscrptDNA,  replaceCharZero)
+d.o$rightTrnscrptDNA <- sapply(d.o$rightTrnscrptDNA, replaceCharZero)
+
 #Convert Exon Starts & Exon Stops back to a character string
-d.o$exonstarts   <- sapply(d.o$exonstarts,   arrayToDigitString)
-d.o$exonends     <- sapply(d.o$exonends,     arrayToDigitString)
-d.o$codingStarts <- sapply(d.o$codingStarts, arrayToDigitString)
-d.o$codingEnds   <- sapply(d.o$codingEnds,   arrayToDigitString)
-d.o$premutstarts <- sapply(d.o$premutstarts, arrayToDigitString)
-d.o$premutends   <- sapply(d.o$premutends,   arrayToDigitString)
+d.o$exonstarts   <- sapply(d.o$exonstarts,   paste, sep='',collapse=' ')
+d.o$exonends     <- sapply(d.o$exonends,     paste, sep='',collapse=' ')
+d.o$codingStarts <- sapply(d.o$codingStarts, paste, sep='',collapse=' ')
+d.o$codingEnds   <- sapply(d.o$codingEnds,   paste, sep='',collapse=' ')
+d.o$premutstarts <- sapply(d.o$premutstarts, paste, sep='',collapse=' ')
+d.o$premutends   <- sapply(d.o$premutends,   paste, sep='',collapse=' ')
 
 #Make smaller set of unique mutant amino acids 21-mers
 dupes <- duplicated(d.o$mutaaReport) #will include one instance of character(0)
@@ -670,15 +704,20 @@ coldescripts <- c('transcript'='from UCSC', 'chrom'='from UCSC', 'strand'='from 
   'rightTrnscrptDNA'='150 nt of transcript DNA to right of mutation',
   'L1crite'='boolean for mutation is in an exon and mutation within coding region',
   'L2crite'='boolean for L1crite AND peptide is not truncated immediately',
-  'L3crite'='boolean for L2crite AND mutation is not synonymous')
+  'L3crite'='boolean for L2crite AND mutation is not synonymous',
+  'FScrite'='boolean for frame shifts. L3crite AND length var and ref not equal AND diff not evenly divisible by 3'
+   )
 
 ### Write to File Operations ### 
 #Make AAStringSet
-
-aaOutputSet <- AAStringSet(unlist(d.o$mutaaReport[L3crite]))
+peplist <- unlist(d.o$mutaaReport[L3crite])
+peplist <- gsub(pattern='\\*$',replacement='', x=peplist) #remove * char at end
+aaOutputSet <- AAStringSet(peplist)
 names(aaOutputSet)<-paste(d.o$transcript[L3crite],"leftflank",d.o$leftflank[L3crite])
 #Make Uniques AAStringSet
-aaUniqueSet <- AAStringSet(unlist(d.o.u$mutaaReport))
+peplist <- unlist(d.o.u$mutaaReport)
+peplist <- gsub(pattern='\\*',replacement='', x=peplist) #remove * characters
+aaUniqueSet <- AAStringSet(peplist)
 names(aaUniqueSet)<-paste(d.o.u$transcript,"leftflank",d.o.u$leftflank)
 
 #write FASTA format output
@@ -692,28 +731,47 @@ outfile <- paste(myOutDir,outname,sep='')
 write.XStringSet(aaUniqueSet, filepath=outfile, append=FALSE, format="fasta")
 
 
-### Output processed data frames ###
-cols.out<-c(colnames(dfbig.i)[1:8],colnames(dfbig.i)[13:19])
-df.out<- dfbig.i[,cols.out]
+### Write All Data for Full Set. ###
+cls<- unlist( lapply(d.o,class), use.names=FALSE )
+df.out<- d.o
 #open connection
-outfile<-file(description=paste(myOutDir,'GastricMutsToPeps_FULL.txt',sep=''),
+outfile<-file(description=paste(myOutDir,'mutsToPepsAllData_FULL.txt',sep=''),
               open='w', encoding='UTF-8', raw=FALSE)
 #write data
 write.table(x=df.out, file=outfile,append=FALSE,quote=FALSE,sep='\t',eol='\n',na='NA',
             dec='.', row.names=FALSE, col.names=TRUE, qmethod='escape')
 #close connection
 close(outfile)
-#select columns
-cols.out<-c(colnames(dfbig.u)[1:8],colnames(dfbig.u)[13:19])
-df.out<- dfbig.u[,cols.out]
+
+### Write All Data for Uniques Set. ###
+df.out<- d.o.u
 #open connection
-outfile<-file(description=paste(myOutDir,'GastricMutsToPeps_Unique.txt',sep=''),
+outfile<-file(description=paste(myOutDir,'mutsToPepsAllData_Unique.txt',sep=''),
               open='w', encoding='UTF-8', raw=FALSE)
 #write data
 write.table(x=df.out, file=outfile,append=FALSE,quote=FALSE,sep='\t',eol='\n',na='NA',
             dec='.', row.names=FALSE, col.names=TRUE, qmethod='escape')
 #close connection
 close(outfile)
+
+### Write Column definitions for All Data ###
+df.out <- as.data.frame(coldescripts)
+#open connection
+outfile<-file(description=paste(myOutDir,'mutsToPepsAllData_ColumnDefs.txt',sep=''),
+              open='w', encoding='UTF-8', raw=FALSE)
+#write data
+write.table(x=df.out, file=outfile,append=FALSE,quote=FALSE,sep='\t',eol='\n',na='NA',
+            dec='.', row.names=TRUE, col.names=TRUE, qmethod='escape')
+#close connection
+close(outfile)
+
+
+#InO
+rtt <- Sys.time() - analsis.start
+print("Run Time Total:")
+print(rtt)
+print("END OF LINE")
+sink()
 
 ################################################################################
 #        Clean Up                                                       #######
@@ -736,6 +794,12 @@ detach("package:Biostrings")
 ################################################################################
 #        Scrap Code                                                     #######
 ##############################################################################
+
+# arrayToDigitString <- function(x){
+#   ret <- paste(x, sep='',collapse=' ')
+#   ret
+# }
+
 
 # #Include these just before "Get all the coding starts prior to mutation"  
 # #to add 3 nucleotides to the 3' end of the resulting mrna transcript
