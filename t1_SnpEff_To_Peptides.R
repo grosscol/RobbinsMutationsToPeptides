@@ -50,10 +50,13 @@ library("reshape")
 #helper function will be nested inside of an lapply or sapply call
 #take string of digitis separated by commas, return list of integers.
 digitStringToArray <- function(x){
-  ret<-lapply(str_extract_all(x,'\\d+'),FUN=as.integer, names=NULL)
+  ret <- lapply(str_extract_all(x,'\\d+'),FUN=as.integer, names=NULL)
   unname(ret)
 }
 
+arrayToDigitString <- function(x){
+  ret <- paste(x, sep=' ')
+}
 
 ################################################
 ###  Import Data                        #######
@@ -569,7 +572,6 @@ getTrnascriptRightOfMut <- function(rightnt, mutTrnscrtDNAPos, var_allele_len, m
   ret
 }
 
-
 #calc left and right ends (check if enough space)
 d$leftnt[L3crite] <- ifelse(d$mutTrnscrtDNAPos[L3crite] > 150,
                    d$mutTrnscrtDNAPos[L3crite] - 150,
@@ -590,18 +592,128 @@ d$rightTrnscrptDNA[L3crite] <- apply(d[L3crite,c('rightnt','mutTrnscrtDNAPos','v
 ################################################
 ###  Output Result of    Calculations   #######
 ##############################################
+#Append level criteria to data frame:
+d$L1crite <- L1crite
+d$L2crite <- L2crite
+d$L3crite <- L3crite
+
 #Copy data frame for output
 d.o <- d
 
-
 #Convert Biostrings to regular character strings
-d.o$trnscrtDNA <- sapply(d.o$trnscrtDNA,as.character)
-d.o$mutTrnscrtDNA <- sapply(d.o$mutTrnscrtDNA,as.character)
-d.o$aanorm <- sapply(d.o$aanorm,as.character)
-d.o$aamut <- sapply(d.o$aamut,as.character)
-d.o$mutaaReport <- sapply(d.o$mutaaReport,as.character)
-View(d.o[L3crite & d.o$transcript=='uc003lli.3',c(1,3,15,16,42,35,36)])
+d.o$trnscrtDNA       <- sapply(d.o$trnscrtDNA,       as.character)
+d.o$mutTrnscrtDNA    <- sapply(d.o$mutTrnscrtDNA,    as.character)
+d.o$aanorm           <- sapply(d.o$aanorm,           as.character)
+d.o$aamut            <- sapply(d.o$aamut,            as.character)
+d.o$mutaaReport      <- sapply(d.o$mutaaReport,      as.character)
+d.o$leftTrnscrptDNA  <- sapply(d.o$leftTrnscrptDNA,  as.character)
+d.o$rightTrnscrptDNA <- sapply(d.o$rightTrnscrptDNA, as.character)
 
+#Convert Exon Starts & Exon Stops back to a character string
+d.o$exonstarts   <- sapply(d.o$exonstarts,   arrayToDigitString)
+d.o$exonends     <- sapply(d.o$exonends,     arrayToDigitString)
+d.o$codingStarts <- sapply(d.o$codingStarts, arrayToDigitString)
+d.o$codingEnds   <- sapply(d.o$codingEnds,   arrayToDigitString)
+d.o$premutstarts <- sapply(d.o$premutstarts, arrayToDigitString)
+d.o$premutends   <- sapply(d.o$premutends,   arrayToDigitString)
+
+#Make smaller set of unique mutant amino acids 21-mers
+dupes <- duplicated(d.o$mutaaReport) #will include one instance of character(0)
+d.o.u <- d.o[L3crite & !dupes, ]
+
+#InO
+print(paste(sum(dupes[L3crite]),"duplicate mutant report (~ 21mer) peptides"))
+print(paste(sum(!dupes[L3crite]),"unique mutant report (~ 21mer) peptides"))
+
+
+### Text description of columns for header of output data frame ###
+coldescripts <- c('transcript'='from UCSC', 'chrom'='from UCSC', 'strand'='from UCSC', 
+'txstart'='from UCSC', 'txend'='from UCSC', 'cdsstart'='from UCSC', 'cdsend'='From UCSC',
+  'exoncount'='from UCSC', 'exonstarts'='from UCSC', 'exonends'='from UCSC',
+  'proteinid'='from UCSC', 'alignid'='from UCSC', 
+  'chrom.1'='from given data should match UCSC', 
+  'pos'='Position of mutation from source data.',
+  'ref_allele'='normal nt from source data',
+  'var_allele'='altered nt from source data', 
+  'leftflank'='calculated ref genome position one nt to the left of mutation',
+  'rightflank'='calculated ref genome position one nt to the right of mutation',
+  'noncoding'='boolean flag if mutation is within cdsstart and cdsend',
+  'inexon'='boolean flag if mutation is with an exon start and end',
+  'exonslen'='calculated number of exons',
+  'exCDS'='calculated coding exon starts', 
+  'exCDE'='calculated coding exon ends', 
+  'codingStarts'='calculated coding starts with modified first coding start',
+  'codingEnds'='calculated coding ends with modified last coding start',
+  'premutstarts'='calculated coding starts that occur before the mutation',
+  'premutends'='calculated coding ends that occurr before the mutation',
+  'flagMutSE'='boolean flag for error condition where different number of coding starts and ends',
+  'mutTrnscrtDNAPos'='calculated mutation position within the transcript',
+  'trnscrtDNA'='normal transcript DNA from UCSC between coding starts and ends',
+  'mutAAPos'='calculated amino acid position of mutation',
+  'lpmut'='calculated transcript position one nt to the left of mutation start',
+  'rpmut'='calculated transcript position one nt to the right of mutation end',
+  'mutTrnscrtDNA'='mutated transcript DNA',
+  'mutTrnscrtDNAlen'='length of mutant transcript DNA',
+  'var_allele_len'='length of variant allele',
+  'aanorm'='normal peptide sequence w/o mutation',
+  'aamut'='mutant peptide sequence with mutation',
+  'isTrunc'='boolean flag for if mutant is immediately truncated',
+  'isSynon'='boolean flag for if mutant makes a synonymous mutation',
+  'lareport'='calculated amino acid position for left side of ~21 mer to report',
+  'lenAAMut'='length of the mutant peptide', 
+  'rareport'='calculated amino acid position for right side of ~21 mer to report', 
+  'noStop'='boolean flag indicating no stop (*) found in mutant amino acid sequence',
+  'mutaaReport'='shortened peptide to +/- of mutation',
+  'leftnt'='transcript postion 150 nt to left of mutation',
+  'rightnt'='transcript position 150 nt to right of mutation',
+  'leftTrnscrptDNA'='150 nt transcript DNA to left of mutation',
+  'rightTrnscrptDNA'='150 nt of transcript DNA to right of mutation',
+  'L1crite'='boolean for mutation is in an exon and mutation within coding region',
+  'L2crite'='boolean for L1crite AND peptide is not truncated immediately',
+  'L3crite'='boolean for L2crite AND mutation is not synonymous')
+
+### Write to File Operations ### 
+#Make AAStringSet
+
+aaOutputSet <- AAStringSet(unlist(d.o$mutaaReport[L3crite]))
+names(aaOutputSet)<-paste(d.o$transcript[L3crite],"leftflank",d.o$leftflank[L3crite])
+#Make Uniques AAStringSet
+aaUniqueSet <- AAStringSet(unlist(d.o.u$mutaaReport))
+names(aaUniqueSet)<-paste(d.o.u$transcript,"leftflank",d.o.u$leftflank)
+
+#write FASTA format output
+outname <- 'shortMutantPeptides_FULL.fa'
+outfile <- paste(myOutDir,outname,sep='')
+write.XStringSet(aaOutputSet, filepath=outfile, append=FALSE, format="fasta")
+
+#write FASTA format output
+outname <- 'shortMutantPeptides_Unique.fa'
+outfile <- paste(myOutDir,outname,sep='')
+write.XStringSet(aaUniqueSet, filepath=outfile, append=FALSE, format="fasta")
+
+
+### Output processed data frames ###
+cols.out<-c(colnames(dfbig.i)[1:8],colnames(dfbig.i)[13:19])
+df.out<- dfbig.i[,cols.out]
+#open connection
+outfile<-file(description=paste(myOutDir,'GastricMutsToPeps_FULL.txt',sep=''),
+              open='w', encoding='UTF-8', raw=FALSE)
+#write data
+write.table(x=df.out, file=outfile,append=FALSE,quote=FALSE,sep='\t',eol='\n',na='NA',
+            dec='.', row.names=FALSE, col.names=TRUE, qmethod='escape')
+#close connection
+close(outfile)
+#select columns
+cols.out<-c(colnames(dfbig.u)[1:8],colnames(dfbig.u)[13:19])
+df.out<- dfbig.u[,cols.out]
+#open connection
+outfile<-file(description=paste(myOutDir,'GastricMutsToPeps_Unique.txt',sep=''),
+              open='w', encoding='UTF-8', raw=FALSE)
+#write data
+write.table(x=df.out, file=outfile,append=FALSE,quote=FALSE,sep='\t',eol='\n',na='NA',
+            dec='.', row.names=FALSE, col.names=TRUE, qmethod='escape')
+#close connection
+close(outfile)
 
 ################################################################################
 #        Clean Up                                                       #######
