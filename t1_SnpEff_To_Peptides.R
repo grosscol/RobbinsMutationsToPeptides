@@ -153,7 +153,8 @@ print(infile)
 ##########
 ### 0  ### Record Start Time
 ##########
-analsis.start <- Sys.time()
+analysis.start <- Sys.time()
+print(analysis.start)
 
 #dfc is input data frame. 
 # Expected initial columns required:
@@ -627,11 +628,8 @@ d.o$rightTrnscrptDNA <- sapply(d.o$rightTrnscrptDNA, as.character)
 
 #Replace character(0) with ''
 replaceCharZero <- function(x){
-  if( identical(x,character(0)) ){
-    ret <- ''
-  }else{
-    ret <- x
-  }
+  if( identical(x,character(0)) ){ret <- '' }
+  else{ret <- x}
   ret
 }
 
@@ -767,7 +765,7 @@ close(outfile)
 
 
 #InO
-rtt <- Sys.time() - analsis.start
+rtt <- Sys.time() - analysis.start
 print("Run Time Total:")
 print(rtt)
 print("END OF LINE")
