@@ -79,6 +79,7 @@ impdir<-'S:/TIL-LAB/Staff/Colin/Projects/MutationsToPeptides/procdata'
 # )
 
 infilenames <- c(
+  'mutsrefs2012-05-30_155809.txt',
   'mutsrefs2012-04-30_141449.txt',
   '2219_mutsrefs2012-05-08_183106.txt',
   '2221_mutsrefs2012-05-08_183335.txt'
@@ -164,7 +165,7 @@ print(analysis.start)
 
 #rename input data frame to "d" for the sake of brevity
 d <- dfc
-d$seq <- NULL #seq column is superfluous
+d$seq <- NULL #if sequence is present, drop the column. Superfluous.
 
 #InO(Intermediat Output)
 print(paste(nrow(d), "Rows total."))
@@ -664,6 +665,7 @@ coldescripts <- c('transcript'='from UCSC', 'chrom'='from UCSC', 'strand'='from 
   'exoncount'='from UCSC', 'exonstarts'='from UCSC', 'exonends'='from UCSC',
   'proteinid'='from UCSC', 'alignid'='from UCSC', 
   'chrom.1'='from given data should match UCSC', 
+  'refseqid'='RefSeq ID from UCSC knownToRefSeq table.',
   'pos'='Position of mutation from source data.',
   'ref_allele'='normal nt from source data',
   'var_allele'='altered nt from source data', 
