@@ -67,22 +67,13 @@ digitStringToArray <- function(x){
 #input Directory
 impdir<-'S:/TIL-LAB/Staff/Colin/Projects/MutationsToPeptides/procdata'
 
-#List of files to process.
-# infilenames<-c(
-# '2219_tumor-vs-normal_discordantSNPs_annotated_new.txt',
-# '2221_tumor-vs-normal_discordantSNPs_annotated_new.txt',
-# '2246_tumor-vs-normal_discordantSNPs_annotated_new.txt',
-# '2359_tumor-vs-normal_discordantSNPs_annotated_new.txt',
-# '2556_tumor-vs-normal_discordantSNPs_annotated_new.txt',
-# '3466_tumor-vs-normal_discordantSNPs_annotated_new.txt',
-# 'Gastric2_tumor-vs-normal_discordantSNPs_annotated_new.txt'
-# )
-
 infilenames <- c(
-  'mutsrefs2012-05-30_155809.txt',
-  'mutsrefs2012-04-30_141449.txt',
-  '2219_mutsrefs2012-05-08_183106.txt',
-  '2221_mutsrefs2012-05-08_183335.txt'
+  'mutsrefs-2219_2012-06-01_115038.txt',
+  'mutsrefs-2221_2012-06-01_115248.txt',
+  'mutsrefs-2246_2012-06-01_115353.txt',
+  'mutsrefs-2359_2012-06-01_115429.txt',
+  'mutsrefs-2556_2012-06-01_115503.txt',
+  'mutsrefs-3466_2012-06-01_134710.txt'
   )
 
 #import combined data frame
@@ -513,7 +504,7 @@ d$rareport[crite] <- d$mutAAPos[crite] + 10
 FScrite <- (nchar(d$var_allele) != nchar(d$ref_allele)) & 
   ( (nchar(d$var_allele)-nchar(d$ref_allele))%%3 !=0 ) & L3crite
 #InO
-print(paste(sum(crite),"Non-synonymous frame shift mutations flagged."))
+print(paste(sum(FScrite),"Non-synonymous frame shift mutations flagged."))
 
 ##########
 ### 21 ### Recalculate right amino acid report cut length
@@ -665,7 +656,7 @@ coldescripts <- c('transcript'='from UCSC', 'chrom'='from UCSC', 'strand'='from 
   'exoncount'='from UCSC', 'exonstarts'='from UCSC', 'exonends'='from UCSC',
   'proteinid'='from UCSC', 'alignid'='from UCSC', 
   'chrom.1'='from given data should match UCSC', 
-  'refseqid'='RefSeq ID from UCSC knownToRefSeq table.',
+  'geneSymbol'='geneSymbol data from UCSC kgXref table.',
   'pos'='Position of mutation from source data.',
   'ref_allele'='normal nt from source data',
   'var_allele'='altered nt from source data', 
@@ -781,13 +772,13 @@ sink()
 rm(list=ls(all=TRUE))
 
 ### Detach Packages (reverse order from load) ###
-detach("package:reshape")
-detach("package:stringr")
-detach("package:plyr")
-detach("package:GenomicFeatures")
-detach("package:BSgenome.Hsapiens.UCSC.hg19")
-detach("package:BSgenome")
-detach("package:Biostrings")
+# detach("package:reshape")
+# detach("package:stringr")
+# detach("package:plyr")
+# detach("package:GenomicFeatures")
+# detach("package:BSgenome.Hsapiens.UCSC.hg19")
+# detach("package:BSgenome")
+# detach("package:Biostrings")
 
 
 
