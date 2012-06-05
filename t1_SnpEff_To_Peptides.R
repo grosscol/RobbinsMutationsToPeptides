@@ -68,12 +68,13 @@ digitStringToArray <- function(x){
 impdir<-'S:/TIL-LAB/Staff/Colin/Projects/MutationsToPeptides/procdata'
 
 infilenames <- c(
-  'mutsrefs-2219_2012-06-01_115038.txt',
-  'mutsrefs-2221_2012-06-01_115248.txt',
-  'mutsrefs-2246_2012-06-01_115353.txt',
-  'mutsrefs-2359_2012-06-01_115429.txt',
-  'mutsrefs-2556_2012-06-01_115503.txt',
-  'mutsrefs-3466_2012-06-01_134710.txt'
+  '2219_mutsrefs_2012-06-04.txt',
+  '2221_mutsrefs_2012-06-04.txt',
+  '2246_mutsrefs_2012-06-04.txt',
+  '2359_mutsrefs_2012-06-04.txt',
+  '2556_mutsrefs_2012-06-04.txt',
+  '3466_mutsrefs_2012-06-04.txt',
+  'gastric2_mutsrefs_2012-06-04.txt'
   )
 
 #import combined data frame
@@ -81,6 +82,9 @@ infile<-paste(impdir,infilenames[1],sep='/')
 #cls<- c( rep("character",3), rep("integer",5), rep("character",6), integer, rep("character",2) )
 dfc <-read.table(infile, header=TRUE, sep="\t",
                    comment.char="#",encoding="UTF-8",stringsAsFactors=FALSE)
+
+#output Prefix
+outprfx <- ''
 
 ################################################
 ###  Format Data                        #######
@@ -138,7 +142,7 @@ dfc$ref_allele[ins] <- ''
 ###  CALCULATIONS                                                       #######
 ##############################################################################
 #begin output sink
-sink(paste(myOutDir,"mutsToPeps_AnalysisSink.txt", sep=""),type = c("output", "message"))
+sink(paste(myOutDir,outprfx,"mutsToPeps_AnalysisSink.txt", sep=""),type = c("output", "message"))
 print("Beginning Mutations to Peptides Analysis")
 print(infile)
 
@@ -400,19 +404,19 @@ d$var_allele_len[L1crite] <- nchar(d$var_allele[L1crite])
 start.time <- Sys.time()
 #translate normal '+' strand genes
 crite <- L1crite & d$strand=='+'
-d$aanorm[crite] <- sapply(d$trnscrtDNA[crite],
+d$aaseqnorm[crite] <- sapply(d$trnscrtDNA[crite],
                           FUN=function(x){translate(dna2rna(x))})
 #translate normal '-' strand genes
 crite <- L1crite & d$strand=='-'
-d$aanorm[crite] <- sapply(d$trnscrtDNA[crite],
+d$aaseqnorm[crite] <- sapply(d$trnscrtDNA[crite],
                           FUN=function(x){translate(dna2rna(reverseComplement(x)))})
 #translate mutant '+' strand genes
 crite <- L1crite & d$strand=='+'
-d$aamut[crite] <- sapply(d$mutTrnscrtDNA[crite],
+d$aaseqmut[crite] <- sapply(d$mutTrnscrtDNA[crite],
                           FUN=function(x){translate(dna2rna(x))})
 #translate mutant '-' strand genes
 crite <- L1crite & d$strand=='-'
-d$aamut[crite] <- sapply(d$mutTrnscrtDNA[crite],
+d$aaseqmut[crite] <- sapply(d$mutTrnscrtDNA[crite],
                           FUN=function(x){translate(dna2rna(reverseComplement(x)))})
 #compute run duration
 dur <- Sys.time() - start.time
@@ -423,17 +427,17 @@ print(paste(dur,attr(dur,'units'),"required to do transcription & translation of
 ##########
 ### 16 ### Check if variant amino acid is a stop.
 ##########
-isMutAAstop <- function(aamut, mutAAPos){
+isMutAAstop <- function(aaseqmut, mutAAPos){
   #Check for edge/error cases
-  if(mutAAPos > length(aamut)){
-    cat(length(aamut),mutAAPos,'; ')
+  if(mutAAPos > length(aaseqmut)){
+    cat(length(aaseqmut),mutAAPos,'; ')
     return(NA)
   }
-  aamut[mutAAPos] == AAString("*")
+  aaseqmut[mutAAPos] == AAString("*")
 }
 #Apply the function to each row of the data frame
 #Use splat() instead of spelling out function arguments
-d$isTrunc[L1crite] <- apply(d[L1crite,c('aamut','mutAAPos')],
+d$isTrunc[L1crite] <- apply(d[L1crite,c('aaseqmut','mutAAPos')],
                                   MARGIN=1,FUN=splat(isMutAAstop))
 #InO
 print(paste(sum(d$isTrunc[L1crite & !is.na(d$isTrunc)]),
@@ -457,12 +461,12 @@ L2crite[is.na(L2crite)] <- FALSE
 ##########
 ### 17 ### Check variant peptide against normal peptide
 ##########
-isSynonymousMutation <- function(mutAAPos,aamut,aanorm){
-  aamut[mutAAPos:length(aamut)] == aanorm[mutAAPos:length(aanorm)]
+isSynonymousMutation <- function(mutAAPos,aaseqmut,aaseqnorm){
+  aaseqmut[mutAAPos:length(aaseqmut)] == aaseqnorm[mutAAPos:length(aaseqnorm)]
 }
 #Apply the function to each row of the data frame
 #Use splat() instead of spelling out function arguments
-d$isSynon[L2crite] <- apply(d[L2crite,c('aanorm','aamut','mutAAPos')],
+d$isSynon[L2crite] <- apply(d[L2crite,c('aaseqnorm','aaseqmut','mutAAPos')],
                             MARGIN=1,FUN=splat(isSynonymousMutation))
 #InO
 print(paste(sum(d$isSynon[L2crite]),"Synonymous mutations flagged."))
@@ -489,11 +493,11 @@ d$lareport[crite] <- d$mutAAPos[crite] - 10
 ##########
 ### 19 ### Calculate report cut length to left of variant AA
 ##########
-#Calc length of mutant amino acid sequence (aamut)
-d$lenAAMut[L3crite] <- sapply(d$aamut[L3crite],length)
+#Calc length of mutant amino acid sequence (aaseqmut)
+d$lenAAMut[L3crite] <- sapply(d$aaseqmut[L3crite],length)
 #default to end position
 d$rareport[L3crite] <- d$lenAAMut[L3crite]
-
+#check of right position is more than three away from end.
 crite <- (d$lenAAMut - d$mutAAPos) > 10 & L3crite
 d$rareport[crite] <- d$mutAAPos[crite] + 10
 
@@ -507,11 +511,11 @@ FScrite <- (nchar(d$var_allele) != nchar(d$ref_allele)) &
 print(paste(sum(FScrite),"Non-synonymous frame shift mutations flagged."))
 
 ##########
-### 21 ### Recalculate right amino acid report cut length
+### 21 ### Recalculate right amino acid report cut length for frame shifts
 ##########
-getNewRightAAReport <- function(aamut, rareport){
+getNewRightAAReport <- function(aaseqmut, rareport){
   #dangerously assuming first stop codon found will be beyond mut position
-  stoppos <- regexpr('\\*',aamut)
+  stoppos <- regexpr('\\*',aaseqmut)
   if(stoppos == -1){
     #no stop codon found.  TODO:translate into 3'UTR ?
     #FLAG using -1
@@ -525,7 +529,7 @@ getNewRightAAReport <- function(aamut, rareport){
 }
 #Apply the function to each row of the data frame
 #Use splat() instead of spelling out function arguments
-d$rareport[FScrite] <- apply(d[FScrite,c('aamut','rareport')],
+d$rareport[FScrite] <- apply(d[FScrite,c('aaseqmut','rareport')],
                             MARGIN=1,FUN=splat(getNewRightAAReport))
 #Flag no stop found
 d$noStop <- FALSE
@@ -536,16 +540,22 @@ d$rareport[d$noStop] <- d$lenAAMut[d$noStop]
 ##########
 ### 22 ### Cut the mutant peptide and store result for reporting
 ##########
-getMutantAAReportSequence <- function(aamut,lareport,rareport){
-  subseq(aamut,start=lareport,end=rareport)
+getMutantAAReportSequence <- function(aaseqmut,lareport,rareport){
+  subseq(aaseqmut,start=lareport,end=rareport)
 }
 #Apply the function to each row of the data frame
 #Use splat() instead of spelling out function arguments
-d$mutaaReport[L3crite] <- apply(d[L3crite,c('aamut','lareport','rareport')],
+d$mutaaReport[L3crite] <- apply(d[L3crite,c('aaseqmut','lareport','rareport')],
                             MARGIN=1,FUN=splat(getMutantAAReportSequence))
 
 #InO
 print(paste(sum(L3crite),"reported mutant amino acid sequences"))
+
+##########
+### 22x ### Get Ref and Var AA @ mutant position
+##########
+
+
 
 ##########
 ### 23 ### Get +/- 150 nt from the mutation flanks 
@@ -612,8 +622,8 @@ d.o <- d
 #Convert Biostrings to regular character strings
 d.o$trnscrtDNA       <- sapply(d.o$trnscrtDNA,       as.character)
 d.o$mutTrnscrtDNA    <- sapply(d.o$mutTrnscrtDNA,    as.character)
-d.o$aanorm           <- sapply(d.o$aanorm,           as.character)
-d.o$aamut            <- sapply(d.o$aamut,            as.character)
+d.o$aaseqnorm           <- sapply(d.o$aaseqnorm,           as.character)
+d.o$aaseqmut            <- sapply(d.o$aaseqmut,            as.character)
 d.o$mutaaReport      <- sapply(d.o$mutaaReport,      as.character)
 d.o$leftTrnscrptDNA  <- sapply(d.o$leftTrnscrptDNA,  as.character)
 d.o$rightTrnscrptDNA <- sapply(d.o$rightTrnscrptDNA, as.character)
@@ -627,8 +637,8 @@ replaceCharZero <- function(x){
 
 d.o$trnscrtDNA       <- sapply(d.o$trnscrtDNA,       replaceCharZero)
 d.o$mutTrnscrtDNA    <- sapply(d.o$mutTrnscrtDNA,    replaceCharZero)
-d.o$aanorm           <- sapply(d.o$aanorm,           replaceCharZero)
-d.o$aamut            <- sapply(d.o$aamut,            replaceCharZero)
+d.o$aaseqnorm           <- sapply(d.o$aaseqnorm,           replaceCharZero)
+d.o$aaseqmut            <- sapply(d.o$aaseqmut,            replaceCharZero)
 d.o$mutaaReport      <- sapply(d.o$mutaaReport,      replaceCharZero)
 d.o$leftTrnscrptDNA  <- sapply(d.o$leftTrnscrptDNA,  replaceCharZero)
 d.o$rightTrnscrptDNA <- sapply(d.o$rightTrnscrptDNA, replaceCharZero)
@@ -680,8 +690,8 @@ coldescripts <- c('transcript'='from UCSC', 'chrom'='from UCSC', 'strand'='from 
   'mutTrnscrtDNA'='mutated transcript DNA',
   'mutTrnscrtDNAlen'='length of mutant transcript DNA',
   'var_allele_len'='length of variant allele',
-  'aanorm'='normal peptide sequence w/o mutation',
-  'aamut'='mutant peptide sequence with mutation',
+  'aaseqnorm'='normal peptide sequence w/o mutation',
+  'aaseqmut'='mutant peptide sequence with mutation',
   'isTrunc'='boolean flag for if mutant is immediately truncated',
   'isSynon'='boolean flag for if mutant makes a synonymous mutation',
   'lareport'='calculated amino acid position for left side of ~21 mer to report',
@@ -713,12 +723,12 @@ names(aaUniqueSet)<-paste(d.o.u$transcript,"leftflank",d.o.u$leftflank)
 
 #write FASTA format output
 outname <- 'shortMutantPeptides_FULL.fa'
-outfile <- paste(myOutDir,outname,sep='')
+outfile <- paste(myOutDir,outprfx,outname,sep='')
 write.XStringSet(aaOutputSet, filepath=outfile, append=FALSE, format="fasta")
 
 #write FASTA format output
 outname <- 'shortMutantPeptides_Unique.fa'
-outfile <- paste(myOutDir,outname,sep='')
+outfile <- paste(myOutDir,outprfx,outname,sep='')
 write.XStringSet(aaUniqueSet, filepath=outfile, append=FALSE, format="fasta")
 
 
@@ -726,7 +736,7 @@ write.XStringSet(aaUniqueSet, filepath=outfile, append=FALSE, format="fasta")
 cls<- unlist( lapply(d.o,class), use.names=FALSE )
 df.out<- d.o
 #open connection
-outfile<-file(description=paste(myOutDir,'mutsToPepsAllData_FULL.txt',sep=''),
+outfile<-file(description=paste(myOutDir,outprfx,'mutsToPepsAllData_FULL.txt',sep=''),
               open='w', encoding='UTF-8', raw=FALSE)
 #write data
 write.table(x=df.out, file=outfile,append=FALSE,quote=FALSE,sep='\t',eol='\n',na='NA',
@@ -737,7 +747,7 @@ close(outfile)
 ### Write All Data for Uniques Set. ###
 df.out<- d.o.u
 #open connection
-outfile<-file(description=paste(myOutDir,'mutsToPepsAllData_Unique.txt',sep=''),
+outfile<-file(description=paste(myOutDir,outprfx,'mutsToPepsAllData_Unique.txt',sep=''),
               open='w', encoding='UTF-8', raw=FALSE)
 #write data
 write.table(x=df.out, file=outfile,append=FALSE,quote=FALSE,sep='\t',eol='\n',na='NA',
@@ -748,7 +758,7 @@ close(outfile)
 ### Write Column definitions for All Data ###
 df.out <- as.data.frame(coldescripts)
 #open connection
-outfile<-file(description=paste(myOutDir,'mutsToPepsAllData_ColumnDefs.txt',sep=''),
+outfile<-file(description=paste(myOutDir,outprfx,'mutsToPepsAllData_ColumnDefs.txt',sep=''),
               open='w', encoding='UTF-8', raw=FALSE)
 #write data
 write.table(x=df.out, file=outfile,append=FALSE,quote=FALSE,sep='\t',eol='\n',na='NA',
