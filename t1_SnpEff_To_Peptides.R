@@ -78,7 +78,7 @@ infilenames <- c(
   )
 
 #import combined data frame
-infile<-paste(impdir,infilenames[1],sep='/')
+infile<-paste(impdir,infilenames[7],sep='/')
 #cls<- c( rep("character",3), rep("integer",5), rep("character",6), integer, rep("character",2) )
 dfc <-read.table(infile, header=TRUE, sep="\t",
                    comment.char="#",encoding="UTF-8",stringsAsFactors=FALSE)
@@ -142,7 +142,7 @@ dfc$ref_allele[ins] <- ''
 ###  CALCULATIONS                                                       #######
 ##############################################################################
 #begin output sink
-sink(paste(myOutDir,outprfx,"mutsToPeps_AnalysisSink.txt", sep=""),type = c("output", "message"))
+#sink(paste(myOutDir,outprfx,"mutsToPeps_AnalysisSink.txt", sep=""),type = c("output", "message"))
 print("Beginning Mutations to Peptides Analysis")
 print(infile)
 
@@ -396,6 +396,7 @@ print(paste(dur,attr(dur,'units'),"required to do concatenate mutant ref DNA."))
 ##########
 d$mutTrnscrtDNAlen[L1crite] <- sapply(d$mutTrnscrtDNA[L1crite], length)
 d$var_allele_len[L1crite] <- nchar(d$var_allele[L1crite])
+d$ref_allele_len[L1crite] <- nchar(d$ref_allele[L1crite])
 
 ##########
 ### 15 ### Do translations. Not elegant, but ham handed works.
@@ -534,7 +535,7 @@ d$rareport[FScrite] <- apply(d[FScrite,c('aaseqmut','rareport')],
 #Flag no stop found
 d$noStop <- FALSE
 d$noStop[which(d$rareport==-1)] <- TRUE
-#Set right reporting end to end of peptide
+#Set right reporting end to end of peptide for those without stop codon
 d$rareport[d$noStop] <- d$lenAAMut[d$noStop]
 
 ##########
@@ -554,7 +555,35 @@ print(paste(sum(L3crite),"reported mutant amino acid sequences"))
 ##########
 ### 22x ### Get Ref and Var AA @ mutant position
 ##########
+getAAwildtype <- function(aaseqnorm,mutAAPos,ref_allele_len){
+  w <- ceiling(ref_allele_len / 3)
+  ret<-as.character(subseq(aaseqnorm,start=mutAAPos,width=w))
+  ret
+}
 
+getAAvarianttype <- function(aaseqmut,mutAAPos,var_allele_len){
+  w <- ceiling(var_allele_len / 3)
+  ret<-as.character(subseq(aaseqmut,start=mutAAPos,width=w))
+  ret
+}
+#Function to get variants for frame shifts
+getFSAAvarianttype <- function(aaseqmut,mutAAPos,rareport){
+  print(paste(aaseqmut,mutAAPos,rareport))
+  #ret <- subseq(aaseqmut,start=mutAAPos,end=rareport)
+  ret <- 'debug'
+  ret
+}
+
+
+d$aawild[L3crite] <- apply(d[L3crite,c('aaseqnorm','mutAAPos','ref_allele_len')],
+                                MARGIN=1,FUN=splat(getAAwildtype))
+
+d$aavar[L3crite] <- apply(d[L3crite,c('aaseqmut','mutAAPos','var_allele_len')],
+                           MARGIN=1,FUN=splat(getAAvarianttype))
+
+#Make corrections to Frame shifted varints using rareport position from above.
+d$aavar[FScrite] <- apply(d[FScrite,c('aaseqmut','mutAAPos','rareport')],
+                          MARGIN=1,FUN=splat(getFSAAvarianttype))
 
 
 ##########
@@ -622,8 +651,8 @@ d.o <- d
 #Convert Biostrings to regular character strings
 d.o$trnscrtDNA       <- sapply(d.o$trnscrtDNA,       as.character)
 d.o$mutTrnscrtDNA    <- sapply(d.o$mutTrnscrtDNA,    as.character)
-d.o$aaseqnorm           <- sapply(d.o$aaseqnorm,           as.character)
-d.o$aaseqmut            <- sapply(d.o$aaseqmut,            as.character)
+d.o$aaseqnorm        <- sapply(d.o$aaseqnorm,        as.character)
+d.o$aaseqmut         <- sapply(d.o$aaseqmut,         as.character)
 d.o$mutaaReport      <- sapply(d.o$mutaaReport,      as.character)
 d.o$leftTrnscrptDNA  <- sapply(d.o$leftTrnscrptDNA,  as.character)
 d.o$rightTrnscrptDNA <- sapply(d.o$rightTrnscrptDNA, as.character)
@@ -637,8 +666,8 @@ replaceCharZero <- function(x){
 
 d.o$trnscrtDNA       <- sapply(d.o$trnscrtDNA,       replaceCharZero)
 d.o$mutTrnscrtDNA    <- sapply(d.o$mutTrnscrtDNA,    replaceCharZero)
-d.o$aaseqnorm           <- sapply(d.o$aaseqnorm,           replaceCharZero)
-d.o$aaseqmut            <- sapply(d.o$aaseqmut,            replaceCharZero)
+d.o$aaseqnorm        <- sapply(d.o$aaseqnorm,        replaceCharZero)
+d.o$aaseqmut         <- sapply(d.o$aaseqmut,         replaceCharZero)
 d.o$mutaaReport      <- sapply(d.o$mutaaReport,      replaceCharZero)
 d.o$leftTrnscrptDNA  <- sapply(d.o$leftTrnscrptDNA,  replaceCharZero)
 d.o$rightTrnscrptDNA <- sapply(d.o$rightTrnscrptDNA, replaceCharZero)
