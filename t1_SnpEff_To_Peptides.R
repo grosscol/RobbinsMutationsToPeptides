@@ -142,7 +142,7 @@ dfc$ref_allele[ins] <- ''
 ###  CALCULATIONS                                                       #######
 ##############################################################################
 #begin output sink
-#sink(paste(myOutDir,outprfx,"mutsToPeps_AnalysisSink.txt", sep=""),type = c("output", "message"))
+sink(paste(myOutDir,outprfx,"mutsToPeps_AnalysisSink.txt", sep=""),type = c("output", "message"))
 print("Beginning Mutations to Peptides Analysis")
 print(infile)
 
@@ -392,14 +392,14 @@ dur <- Sys.time() - start.time
 print(paste(dur,attr(dur,'units'),"required to do concatenate mutant ref DNA."))
 
 ##########
-### 14b ### Store mutant DNA transcript length
+### 15 ### Store mutant & normal DNA transcript lengths
 ##########
 d$mutTrnscrtDNAlen[L1crite] <- sapply(d$mutTrnscrtDNA[L1crite], length)
 d$var_allele_len[L1crite] <- nchar(d$var_allele[L1crite])
 d$ref_allele_len[L1crite] <- nchar(d$ref_allele[L1crite])
 
 ##########
-### 15 ### Do translations. Not elegant, but ham handed works.
+### 16 ### Do translations. Not elegant, but ham handed works.
 ##########
 #get start time
 start.time <- Sys.time()
@@ -426,7 +426,7 @@ print(paste(dur,attr(dur,'units'),"required to do transcription & translation of
 
 
 ##########
-### 16 ### Check if variant amino acid is a stop.
+### 17 ### Check if variant amino acid is a stop.
 ##########
 isMutAAstop <- function(aaseqmut, mutAAPos){
   #Check for edge/error cases
@@ -460,7 +460,7 @@ L2crite[is.na(L2crite)] <- FALSE
 
 
 ##########
-### 17 ### Check variant peptide against normal peptide
+### 18 ### Check variant peptide against normal peptide
 ##########
 isSynonymousMutation <- function(mutAAPos,aaseqmut,aaseqnorm){
   aaseqmut[mutAAPos:length(aaseqmut)] == aaseqnorm[mutAAPos:length(aaseqnorm)]
@@ -483,7 +483,7 @@ L3crite[is.na(L3crite)] <- FALSE
 #Use L2 criteria
 
 ##########
-### 18 ### Calculate report cut length to left of variant AA
+### 19 ### Calculate report cut length to left of variant AA
 ##########
 #default to position 1
 d$lareport[L3crite] <- 1
@@ -492,7 +492,7 @@ crite <- d$mutAAPos > 10 & L3crite
 d$lareport[crite] <- d$mutAAPos[crite] - 10
 
 ##########
-### 19 ### Calculate report cut length to left of variant AA
+### 20 ### Calculate report cut length to left of variant AA
 ##########
 #Calc length of mutant amino acid sequence (aaseqmut)
 d$lenAAMut[L3crite] <- sapply(d$aaseqmut[L3crite],length)
@@ -503,7 +503,7 @@ crite <- (d$lenAAMut - d$mutAAPos) > 10 & L3crite
 d$rareport[crite] <- d$mutAAPos[crite] + 10
 
 ##########
-### 20 ### Check for frame shift
+### 21 ### Check for frame shift
 ##########
 #Create criteria to identify relevant frame shift mutations
 FScrite <- (nchar(d$var_allele) != nchar(d$ref_allele)) & 
@@ -512,7 +512,7 @@ FScrite <- (nchar(d$var_allele) != nchar(d$ref_allele)) &
 print(paste(sum(FScrite),"Non-synonymous frame shift mutations flagged."))
 
 ##########
-### 21 ### Recalculate right amino acid report cut length for frame shifts
+### 22 ### Recalculate right amino acid report cut length for frame shifts
 ##########
 getNewRightAAReport <- function(aaseqmut, rareport){
   #dangerously assuming first stop codon found will be beyond mut position
@@ -539,7 +539,7 @@ d$noStop[which(d$rareport==-1)] <- TRUE
 d$rareport[d$noStop] <- d$lenAAMut[d$noStop]
 
 ##########
-### 22 ### Cut the mutant peptide and store result for reporting
+### 23 ### Cut the mutant peptide and store result for reporting
 ##########
 getMutantAAReportSequence <- function(aaseqmut,lareport,rareport){
   subseq(aaseqmut,start=lareport,end=rareport)
@@ -553,7 +553,7 @@ d$mutaaReport[L3crite] <- apply(d[L3crite,c('aaseqmut','lareport','rareport')],
 print(paste(sum(L3crite),"reported mutant amino acid sequences"))
 
 ##########
-### 22x ### Get Ref and Var AA @ mutant position
+### 24 ### Get Ref and Var AA @ mutant position
 ##########
 getAAwildtype <- function(aaseqnorm,mutAAPos,ref_allele_len){
   w <- ceiling(ref_allele_len / 3)
@@ -568,10 +568,9 @@ getAAvarianttype <- function(aaseqmut,mutAAPos,var_allele_len){
 }
 #Function to get variants for frame shifts
 getFSAAvarianttype <- function(aaseqmut,mutAAPos,rareport){
-  print(paste(aaseqmut,mutAAPos,rareport))
-  #ret <- subseq(aaseqmut,start=mutAAPos,end=rareport)
-  ret <- 'debug'
-  ret
+  if( class(aaseqmut)=='AAString' ){
+    ret <- subseq(aaseqmut,start=mutAAPos,end=rareport)
+  }
 }
 
 
@@ -582,12 +581,11 @@ d$aavar[L3crite] <- apply(d[L3crite,c('aaseqmut','mutAAPos','var_allele_len')],
                            MARGIN=1,FUN=splat(getAAvarianttype))
 
 #Make corrections to Frame shifted varints using rareport position from above.
-d$aavar[FScrite] <- apply(d[FScrite,c('aaseqmut','mutAAPos','rareport')],
+d$aavar[FScrite] <- apply(d[FScrite,c('aaseqmut','mutAAPos','rareport')], 
                           MARGIN=1,FUN=splat(getFSAAvarianttype))
 
-
 ##########
-### 23 ### Get +/- 150 nt from the mutation flanks 
+### 25 ### Get +/- 150 nt from the mutation flanks 
 ##########
 getTranscriptLeftOfMut <- function(leftnt, mutTrnscrtDNAPos, mutTrnscrtDNA){
   mutTrnscrtDNA <- as.character(mutTrnscrtDNA)
@@ -653,6 +651,8 @@ d.o$trnscrtDNA       <- sapply(d.o$trnscrtDNA,       as.character)
 d.o$mutTrnscrtDNA    <- sapply(d.o$mutTrnscrtDNA,    as.character)
 d.o$aaseqnorm        <- sapply(d.o$aaseqnorm,        as.character)
 d.o$aaseqmut         <- sapply(d.o$aaseqmut,         as.character)
+d.o$aanorm           <- sapply(d.o$aanorm,           as.character)
+d.o$aamut            <- sapply(d.o$aamut,            as.character)
 d.o$mutaaReport      <- sapply(d.o$mutaaReport,      as.character)
 d.o$leftTrnscrptDNA  <- sapply(d.o$leftTrnscrptDNA,  as.character)
 d.o$rightTrnscrptDNA <- sapply(d.o$rightTrnscrptDNA, as.character)
@@ -668,6 +668,8 @@ d.o$trnscrtDNA       <- sapply(d.o$trnscrtDNA,       replaceCharZero)
 d.o$mutTrnscrtDNA    <- sapply(d.o$mutTrnscrtDNA,    replaceCharZero)
 d.o$aaseqnorm        <- sapply(d.o$aaseqnorm,        replaceCharZero)
 d.o$aaseqmut         <- sapply(d.o$aaseqmut,         replaceCharZero)
+d.o$aanorm           <- sapply(d.o$aanorm,           replaceCharZero)
+d.o$aamut            <- sapply(d.o$aamut,            replaceCharZero)
 d.o$mutaaReport      <- sapply(d.o$mutaaReport,      replaceCharZero)
 d.o$leftTrnscrptDNA  <- sapply(d.o$leftTrnscrptDNA,  replaceCharZero)
 d.o$rightTrnscrptDNA <- sapply(d.o$rightTrnscrptDNA, replaceCharZero)
@@ -728,6 +730,8 @@ coldescripts <- c('transcript'='from UCSC', 'chrom'='from UCSC', 'strand'='from 
   'rareport'='calculated amino acid position for right side of ~21 mer to report', 
   'noStop'='boolean flag indicating no stop (*) found in mutant amino acid sequence',
   'mutaaReport'='shortened peptide to +/- of mutation',
+  'aawild'='wild type amino acid @ mutation position',
+  'aavar'='variant amino acid @ mutation position',
   'leftnt'='transcript postion 150 nt to left of mutation',
   'rightnt'='transcript position 150 nt to right of mutation',
   'leftTrnscrptDNA'='150 nt transcript DNA to left of mutation',
