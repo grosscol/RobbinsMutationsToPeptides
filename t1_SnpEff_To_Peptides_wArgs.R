@@ -40,12 +40,10 @@ str_rev <- function(x){
 argpattern <- '(.*?=\\w*?)\\s'
 #get the arguements as a single string
 rawargline <- (paste(commandArgs(trailingOnly=TRUE),collapse=' '))
-print(rawargline)
 #clean raw input
 clnargline <- str_replace_all(rawargline,'"','') #replace quotes with nothing
 clnargline <- str_replace_all(clnargline,'\\\\','/') #replace \ with /
 clnargline <- str_pad(clnargline,nchar(clnargline)+1,side='left',pad=' ')
-print(clnargline)
 #paste in a dummy arg to address the case of no arguments
 clnargline <- paste(clnargline, 'dum=dum',sep=' ')
 #reverse cleaned input
@@ -54,13 +52,11 @@ revargline <- str_rev(clnargline)
 revarglist <- str_extract_all(revargline,argpattern)[[1]]
 #trim and re-revers
 charargs <- unlist(lapply(revarglist,function(x) str_trim(str_rev(x)) ))
-print(charargs)
 #split var and values
 listargs<-str_split(charargs,'=')
 #make data frame of passed in var names and values
 argdf<-data.frame(var=mapply(unlist,listargs)[1,],
                   val=mapply(unlist,listargs)[2,])
-#print(argdf)
 
 #Check if required variables are in the parsed command line arguments
 if('infile' %in% argdf$var){ 
