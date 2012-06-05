@@ -1,9 +1,10 @@
 ################################################################################
-# Title:  Examine Data Set Three: Gastric                                      #
+# Title:  SNPEff to Mutation Data & Peptides                                   #
 # Date:   2012-05-08                                                           #
 # Author: Colin A. Gross                                                       #
 # Desc:   SnpEff output to text from VCF. Output mutated peptides              #
 ################################################################################
+
 
 
 
@@ -20,16 +21,6 @@
 #biocLite("BSgenome")
 
 
-### SETUP AN OUTPUT DIRECTORY VARIABLE ###
-myOutDir <- "S:/TIL-LAB/Staff/Colin/Projects/MutationsToPeptides/procdata/"
-
-### SETUP OUTPUT SINK ### uncomment to enable
-#sink(paste(myOutDir,"Rawoutput.txt", sep=""))
-
-### SET WORKING DIRECTORY ###
-setwd("C:/Users/grossco/Documents/Devel/Rwork/working")
-
-
 library("Biostrings")
 library("BSgenome")
 library("BSgenome.Hsapiens.UCSC.hg19")
@@ -37,6 +28,59 @@ library("GenomicFeatures")
 library("plyr")
 library("stringr")
 library("reshape")
+
+
+################################################################################
+#        PARSE ARGUMENTS OR USE DEFAULTS                                       #
+################################################################################
+str_rev <- function(x){
+  paste(rev(substring(x,1:nchar(x),1:nchar(x)) ),collapse="")
+}
+
+argpattern <- '(.*?=\\w*?)\\s'
+#get the arguements as a single string
+rawargline <- (paste(commandArgs(trailingOnly=TRUE),collapse=' '))
+print(rawargline)
+#clean raw input
+clnargline <- str_replace_all(rawargline,'"','') #replace quotes with nothing
+clnargline <- str_replace_all(clnargline,'\\\\','/') #replace \ with /
+clnargline <- str_pad(clnargline,nchar(clnargline)+1,side='left',pad=' ')
+print(clnargline)
+#paste in a dummy arg to address the case of no arguments
+clnargline <- paste(clnargline, 'dum=dum',sep=' ')
+#reverse cleaned input
+revargline <- str_rev(clnargline)
+#extract lav=rav matches (reversed var=val)
+revarglist <- str_extract_all(revargline,argpattern)[[1]]
+#trim and re-revers
+charargs <- unlist(lapply(revarglist,function(x) str_trim(str_rev(x)) ))
+print(charargs)
+#split var and values
+listargs<-str_split(charargs,'=')
+#make data frame of passed in var names and values
+argdf<-data.frame(var=mapply(unlist,listargs)[1,],
+                  val=mapply(unlist,listargs)[2,])
+#print(argdf)
+
+#Check if required variables are in the parsed command line arguments
+if('infile' %in% argdf$var){ 
+  infile <- argdf$val[argdf$var=='infile']
+}
+if('outdir' %in% argdf$var){
+  outdirr <- argdf$val[argdf$var=='outdir']
+}
+if('outprefix' %in% argdf$var){
+  outprefix <- argdf$val[argdf$var=='outprefix']
+}
+
+#Check if required variables exist
+if( !exists('infile')){ stop('No infile specified.') } #Die
+if( !exists('outdir')){ stop('No outdir specified.') } #Die
+if( !exists('outprefix')){
+  outprefix <- '' #default to blank
+}
+
+
 
 ################################################################################
 #        MAIN                                                                  #
@@ -64,27 +108,13 @@ digitStringToArray <- function(x){
 # Transcript + Mutations  #
 ###########################
 
-#input Directory
-impdir<-'S:/TIL-LAB/Staff/Colin/Projects/MutationsToPeptides/procdata'
 
-infilenames <- c(
-  '2219_mutsrefs_2012-06-04.txt',
-  '2221_mutsrefs_2012-06-04.txt',
-  '2246_mutsrefs_2012-06-04.txt',
-  '2359_mutsrefs_2012-06-04.txt',
-  '2556_mutsrefs_2012-06-04.txt',
-  '3466_mutsrefs_2012-06-04.txt',
-  'gastric2_mutsrefs_2012-06-04.txt'
-  )
-
-#import combined data frame
-infile<-paste(impdir,infilenames[7],sep='/')
 #cls<- c( rep("character",3), rep("integer",5), rep("character",6), integer, rep("character",2) )
 dfc <-read.table(infile, header=TRUE, sep="\t",
                    comment.char="#",encoding="UTF-8",stringsAsFactors=FALSE)
 
 #output Prefix
-outprfx <- ''
+outprefix <- ''
 
 ################################################
 ###  Format Data                        #######
@@ -142,7 +172,7 @@ dfc$ref_allele[ins] <- ''
 ###  CALCULATIONS                                                       #######
 ##############################################################################
 #begin output sink
-sink(paste(myOutDir,outprfx,"mutsToPeps_AnalysisSink.txt", sep=""),type = c("output", "message"))
+sink(paste(outdir,outprefix,"mutsToPeps_AnalysisSink.txt", sep=""),type = c("output", "message"))
 print("Beginning Mutations to Peptides Analysis")
 print(infile)
 
@@ -756,12 +786,12 @@ names(aaUniqueSet)<-paste(d.o.u$transcript,"leftflank",d.o.u$leftflank)
 
 #write FASTA format output
 outname <- 'shortMutantPeptides_FULL.fa'
-outfile <- paste(myOutDir,outprfx,outname,sep='')
+outfile <- paste(outdir,outprefix,outname,sep='')
 write.XStringSet(aaOutputSet, filepath=outfile, append=FALSE, format="fasta")
 
 #write FASTA format output
 outname <- 'shortMutantPeptides_Unique.fa'
-outfile <- paste(myOutDir,outprfx,outname,sep='')
+outfile <- paste(outdir,outprefix,outname,sep='')
 write.XStringSet(aaUniqueSet, filepath=outfile, append=FALSE, format="fasta")
 
 
@@ -769,7 +799,7 @@ write.XStringSet(aaUniqueSet, filepath=outfile, append=FALSE, format="fasta")
 cls<- unlist( lapply(d.o,class), use.names=FALSE )
 df.out<- d.o
 #open connection
-outfile<-file(description=paste(myOutDir,outprfx,'mutsToPepsAllData_FULL.txt',sep=''),
+outfile<-file(description=paste(outdir,outprefix,'mutsToPepsAllData_FULL.txt',sep=''),
               open='w', encoding='UTF-8', raw=FALSE)
 #write data
 write.table(x=df.out, file=outfile,append=FALSE,quote=FALSE,sep='\t',eol='\n',na='NA',
@@ -780,7 +810,7 @@ close(outfile)
 ### Write All Data for Uniques Set. ###
 df.out<- d.o.u
 #open connection
-outfile<-file(description=paste(myOutDir,outprfx,'mutsToPepsAllData_Unique.txt',sep=''),
+outfile<-file(description=paste(outdir,outprefix,'mutsToPepsAllData_Unique.txt',sep=''),
               open='w', encoding='UTF-8', raw=FALSE)
 #write data
 write.table(x=df.out, file=outfile,append=FALSE,quote=FALSE,sep='\t',eol='\n',na='NA',
@@ -791,7 +821,7 @@ close(outfile)
 ### Write Column definitions for All Data ###
 df.out <- as.data.frame(coldescripts)
 #open connection
-outfile<-file(description=paste(myOutDir,outprfx,'mutsToPepsAllData_ColumnDefs.txt',sep=''),
+outfile<-file(description=paste(outdir,outprefix,'mutsToPepsAllData_ColumnDefs.txt',sep=''),
               open='w', encoding='UTF-8', raw=FALSE)
 #write data
 write.table(x=df.out, file=outfile,append=FALSE,quote=FALSE,sep='\t',eol='\n',na='NA',
@@ -822,57 +852,6 @@ rm(list=ls(all=TRUE))
 # detach("package:BSgenome.Hsapiens.UCSC.hg19")
 # detach("package:BSgenome")
 # detach("package:Biostrings")
-
-
-
-################################################################################
-#        Scrap Code                                                     #######
-##############################################################################
-
-# arrayToDigitString <- function(x){
-#   ret <- paste(x, sep='',collapse=' ')
-#   ret
-# }
-
-
-# #Include these just before "Get all the coding starts prior to mutation"  
-# #to add 3 nucleotides to the 3' end of the resulting mrna transcript
-# ##########
-# ### NEW ## Modify coding starts of minus strand genes to include stop codon 
-# ##########
-# modifyCodingStarts <- function(codingStarts,strand){
-#   #replace first coding start with location 3 towards the 5' end.
-#   #will force inclusion of stop codon for minus strand genes.
-#   codingStarts[1] <- codingStarts[1] - 3
-#   codingStarts
-# }
-# #Need to ensure that normal stop codon is included in sequence for (-) genes
-# crite <- d$strand=='-' & L1crite
-# #Apply the function to each row of the data frame
-# #Use splat() instead of spelling out function arguments
-# d$codingStarts[crite] <- apply(d[crite,c('codingStarts','strand')],
-#                         MARGIN=1,FUN=splat(modifyCodingStarts))
-# 
-# ##########
-# ### NEW ## Modify coding ends of plus strand genes to include stop codon 
-# ##########
-# modifyCodingEnds <- function(codingEnds,strand){
-#   #replace first coding start with location 3 towards the 5' end.
-#   #will force inclusion of stop codon for minus strand genes.
-#   codingEnds[length(codingEnds)] <- codingEnds[length(codingEnds)] + 3
-#   codingEnds
-# }
-# #Need to ensure that normal stop codon is included in sequence for (+) genes
-# crite <- d$strand=='+' & L1crite
-# #Apply the function to each row of the data frame
-# #Use splat() instead of spelling out function arguments
-# d$codingEnds[crite] <- apply(d[crite,c('codingEnds','strand')],
-#                       MARGIN=1,FUN=splat(modifyCodingEnds))
-
-
-
-
-
 
 
 
