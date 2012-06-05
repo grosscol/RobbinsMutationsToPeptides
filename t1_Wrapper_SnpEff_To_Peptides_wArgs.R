@@ -34,7 +34,10 @@ outprefixes <- c('2219','2221','2246','2359','2556','3466','gastric')
 #output directory to be used by script
 outdir<-'S:/TIL-LAB/Staff/Colin/Projects/MutationsToPeptides/procdata/'
 
-for(i in 1:length(infilenames)){
+starttime <- Sys.time()
+print(starttime)
+
+for(i in 3:length(infilenames)){
   cat("Run ",i," started... ")
   
   #infile to be used by script
@@ -47,13 +50,17 @@ for(i in 1:length(infilenames)){
   
   #Remove objects resulting from script run.
   objs <- ls(all=TRUE)
-  exempt <- c('i','impdir','outprefixes','outdir','infile','outprefix','scriptfile','infilenames')
+  exempt <- c('starttime','i','impdir','outprefixes','outdir','infile',
+              'outprefix','scriptfile','infilenames')
   objs <- objs[!(objs %in% exempt)] #exclude exempt variables from removal
   rm(list=objs)
   
   cat("Run ",i," complete.\n")
 }
 
+runduration <- Sys.time() - starttime
+print("Full duration: ")
+print(runduration)
 
 
 
