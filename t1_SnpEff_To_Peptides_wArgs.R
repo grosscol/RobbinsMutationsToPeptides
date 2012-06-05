@@ -76,9 +76,10 @@ if('outprefix' %in% argdf$var){
 #Check if required variables exist
 if( !exists('infile')){ stop('No infile specified.') } #Die
 if( !exists('outdir')){ stop('No outdir specified.') } #Die
-if( !exists('outprefix')){
-  outprefix <- '' #default to blank
+if( !exists('outprefix')){ 
+  outprefix <- ''
 }
+
 
 
 
@@ -112,9 +113,6 @@ digitStringToArray <- function(x){
 #cls<- c( rep("character",3), rep("integer",5), rep("character",6), integer, rep("character",2) )
 dfc <-read.table(infile, header=TRUE, sep="\t",
                    comment.char="#",encoding="UTF-8",stringsAsFactors=FALSE)
-
-#output Prefix
-outprefix <- ''
 
 ################################################
 ###  Format Data                        #######
@@ -681,8 +679,8 @@ d.o$trnscrtDNA       <- sapply(d.o$trnscrtDNA,       as.character)
 d.o$mutTrnscrtDNA    <- sapply(d.o$mutTrnscrtDNA,    as.character)
 d.o$aaseqnorm        <- sapply(d.o$aaseqnorm,        as.character)
 d.o$aaseqmut         <- sapply(d.o$aaseqmut,         as.character)
-d.o$aanorm           <- sapply(d.o$aanorm,           as.character)
-d.o$aamut            <- sapply(d.o$aamut,            as.character)
+d.o$aawild           <- sapply(d.o$aawild,           as.character)
+d.o$aavar            <- sapply(d.o$aavar,            as.character)
 d.o$mutaaReport      <- sapply(d.o$mutaaReport,      as.character)
 d.o$leftTrnscrptDNA  <- sapply(d.o$leftTrnscrptDNA,  as.character)
 d.o$rightTrnscrptDNA <- sapply(d.o$rightTrnscrptDNA, as.character)
@@ -698,8 +696,8 @@ d.o$trnscrtDNA       <- sapply(d.o$trnscrtDNA,       replaceCharZero)
 d.o$mutTrnscrtDNA    <- sapply(d.o$mutTrnscrtDNA,    replaceCharZero)
 d.o$aaseqnorm        <- sapply(d.o$aaseqnorm,        replaceCharZero)
 d.o$aaseqmut         <- sapply(d.o$aaseqmut,         replaceCharZero)
-d.o$aanorm           <- sapply(d.o$aanorm,           replaceCharZero)
-d.o$aamut            <- sapply(d.o$aamut,            replaceCharZero)
+d.o$aawild           <- sapply(d.o$aawild,           replaceCharZero)
+d.o$aavar            <- sapply(d.o$aavar,            replaceCharZero)
 d.o$mutaaReport      <- sapply(d.o$mutaaReport,      replaceCharZero)
 d.o$leftTrnscrptDNA  <- sapply(d.o$leftTrnscrptDNA,  replaceCharZero)
 d.o$rightTrnscrptDNA <- sapply(d.o$rightTrnscrptDNA, replaceCharZero)
@@ -841,17 +839,7 @@ sink()
 #        Clean Up                                                       #######
 ##############################################################################
 
-### REMOVE ALL OBJECTS ### 
-rm(list=ls(all=TRUE))
-
-### Detach Packages (reverse order from load) ###
-# detach("package:reshape")
-# detach("package:stringr")
-# detach("package:plyr")
-# detach("package:GenomicFeatures")
-# detach("package:BSgenome.Hsapiens.UCSC.hg19")
-# detach("package:BSgenome")
-# detach("package:Biostrings")
+# Do Cleanup in calling script (if any). Otherwise just close cmnd line session.
 
 
 
