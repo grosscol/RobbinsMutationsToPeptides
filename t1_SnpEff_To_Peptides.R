@@ -74,7 +74,7 @@ infilenames <- c(
   '2359_mutsrefs_2012-06-04.txt',
   '2556_mutsrefs_2012-06-04.txt',
   '3466_mutsrefs_2012-06-04.txt',
-  'gastric2_mutsrefs_2012-06-04.txt'
+  'gastric/gastric2_mutsrefs_2012-06-04.txt'
   )
 
 #import combined data frame
