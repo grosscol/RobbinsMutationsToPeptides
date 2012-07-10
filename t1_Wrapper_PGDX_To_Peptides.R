@@ -13,7 +13,7 @@
 ################################################################################
 
 #input processing script file
-inscriptfile <- 'S:/TIL-LAB/Staff/Colin/Projects/MutationsToPeptides/scripts/t1_SnpEff_To_Peptides_wArgs.R'
+inscriptfile <- 'S:/TIL-LAB/Staff/Colin/Projects/MutationsToPeptides/scripts/t2_PGDX_to_stdinput.R'
 
 #standard input mutations to peptides processing script file
 stdscriptfile <- 'S:/TIL-LAB/Staff/Colin/Projects/MutationsToPeptides/scripts/t3_Std_Mutations_To_Peptides_call.R'
@@ -22,17 +22,25 @@ stdscriptfile <- 'S:/TIL-LAB/Staff/Colin/Projects/MutationsToPeptides/scripts/t3
 impdir<-'S:/TIL-LAB/Staff/Colin/Projects/MutationsToPeptides/procdata'
 
 infilenames <- c(
-  '2369/mutsrefs.txt'
-
+  '2369/mutsrefs.txt',
+  '2098/mutsrefs.txt',
+  '2591/mutsrefs.txt'
   )
 
 #Set file prefixes for output
 outprefixes <- c(
-  '2369'
+  '2369',
+  '2098',
+  '2591'
   )
 
 #output directory to be used by script
 outdir<-'S:/TIL-LAB/Staff/Colin/Projects/MutationsToPeptides/procdata/'
+
+#Load correct UCSC Library for the input. Do NOT load both.
+library("BSgenome.Hsapiens.UCSC.hg18")
+#library("BSgenome.Hsapiens.UCSC.hg19")
+
 
 starttime <- Sys.time()
 print(starttime)
@@ -67,18 +75,27 @@ print("Full duration: ")
 print(runduration)
 
 
+####################
+### Cleanup     ###
+##################
 
+#Check which database was loaded, and detach it.
+dbl <- c("package:BSgenome.Hsapiens.UCSC.hg18", 
+                  "package:BSgenome.Hsapiens.UCSC.hg19")
 
-### REMOVE ALL OBJECTS ###
-rm(list=ls(all=TRUE))
+loaded <- unlist(sapply(dbl, FUN=function(v) grep(v,search(),value=TRUE)) )
+#detach loaded packages
+sapply(loaded, FUN=detach, character.only=TRUE)
 
 ### Detach Packages (reverse order from load) ###
 detach("package:reshape")
 detach("package:stringr")
 detach("package:plyr")
 detach("package:GenomicFeatures")
-detach("package:BSgenome.Hsapiens.UCSC.hg19")
 detach("package:BSgenome")
 detach("package:Biostrings")
+
+### REMOVE ALL OBJECTS ###
+rm(list=ls(all=TRUE))
 
 

@@ -10,7 +10,7 @@
 ################################################################################
 #        SETUP                                                                 #
 ################################################################################
-
+require(stringr)
 
 ################################################################################
 #        PARSE ARGUMENTS OR USE DEFAULTS                                       #
@@ -95,6 +95,9 @@ dfc$rightflank <- dfc$rightflank.1 + 1
 #Drop old columns
 dfc$leftflank.1 <- NULL
 dfc$rightflank.1 <- NULL
+
+#Convert all column names to lower case
+colnames(dfc) <- tolower(colnames(dfc))
 
 
 ################################################

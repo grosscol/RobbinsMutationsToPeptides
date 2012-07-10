@@ -3,6 +3,8 @@
 # Date:   2012-07-09                                                           #
 # Author: Colin A. Gross                                                       #
 # Desc:   Standard input data frame. Output mutated peptides                   #
+#       Need to provide dfc, correct UCSC Library, output directory,           #
+#       and prefix from calling environment.                                   #
 ################################################################################
 
 
@@ -11,15 +13,6 @@
 ################################################################################
 #        SETUP                                                                 #
 ################################################################################
-
-#source("http://bioconductor.org/biocLite.R")
-#biocLite("Biostrings")
-#biocLite("GenomicFeatures")
-
-# source("http://bioconductor.org/biocLite.R")
-# biocLite("BSgenome.Hsapiens.UCSC.hg18")
-#biocLite("BSgenome")
-
 
 require("Biostrings")
 require("BSgenome")
@@ -43,7 +36,7 @@ if( length(dbsloaded) != 1 ){
   #attach default
   require("BSgenome.Hsapiens.UCSC.hg19")
 }else{
-  cat("DB Loaded:",dbsloaded)
+  cat("\nDB Loaded:",dbsloaded,"\n")
 }
   
 
@@ -75,18 +68,42 @@ if( !("dfc" %in% ls()) ){ stop('Input data.frame not found.') }
 ###  Check Input Data                   #######
 ##############################################
 
+#requires lower case fields
 requiredfields <- c('transcript','leftflank','rightflank','ref_allele',
-                    'var_allele','chrom','strand','txStart','txEnd','cdsStart',
-                    'cdsEnd','exonCount','exonStarts','exonEnds','proteinID',
-                    'alignID','geneSymbol')
+                    'var_allele','chrom','strand','txstart','txend','cdsstart',
+                    'cdsend','exoncount','exonstarts','exonends','proteinid',
+                    'alignid','genesymbol')
 
 nfieldsmissing <- length(requiredfields) - sum(requiredfields %in% colnames(dfc))
+wfields <- which( !(requiredfields %in% colnames(dfc) ) )
 #InO(Intermediate Output)
-cat("Number missing input fields: ",nfieldsmissing)
+cat("Number missing input fields: ", nfieldsmissing,"\n")
 if( nfieldsmissing != 0){ 
   #Die
-  stop('Input fields missing. Check infile columns.') 
+  stop('Input fields missing. Check input columns: ',requiredfields[wfields] ) 
   } 
+
+
+
+
+################################################
+###  Format Data                        #######
+##############################################
+
+#Convert column names to lower case
+colnames(dfc) <- tolower(colnames(dfc))
+
+#change name column from knownGene table to "transcript"
+dfc <- plyr::rename(dfc, c("name" = "transcript") )
+#change var and ref column names to match expected column names with _allele
+dfc <- plyr::rename(dfc, c("var" = "var_allele", "ref" = "ref_allele") )
+
+#Parse strings of digits separated by commas to array of integers
+dfc$exonstarts<-unname(sapply(dfc$exonstarts, FUN=digitStringToArray))
+dfc$exonends<-unname(sapply(dfc$exonends, FUN=digitStringToArray))
+
+
+
 
 ################################################################################
 ###  CALCULATIONS                                                       #######
@@ -94,7 +111,7 @@ if( nfieldsmissing != 0){
 #begin output sink
 sink(paste(outdir,outprefix,"mutsToPeps_AnalysisSink.txt", sep=""),type = c("output", "message"))
 print("Beginning Mutations to Peptides Analysis")
-print(infile)
+
 
 ##########
 ### 0  ### Record Start Time
@@ -761,7 +778,7 @@ sink()
 #        Clean Up                                                       #######
 ##############################################################################
 
-# Do Cleanup in calling script (if any). Otherwise just close cmnd line session.
+# Do Cleanup in calling script.
 
 
 
