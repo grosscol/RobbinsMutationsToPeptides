@@ -76,12 +76,25 @@ requiredfields <- c('transcript','leftflank','rightflank','ref_allele',
 
 nfieldsmissing <- length(requiredfields) - sum(requiredfields %in% colnames(dfc))
 wfields <- which( !(requiredfields %in% colnames(dfc) ) )
+#use defaults where possible
+
 #InO(Intermediate Output)
 cat("Number missing input fields: ", nfieldsmissing,"\n")
 if( nfieldsmissing != 0){ 
+  #Check if the missing fields can be defaulted
+  if(sum(requiredfields[wfields] %in% c('proteinid','alignid'))==length(wfields)){
+    #The missing fields are a full subset of the default-able fields
+    print("Using NA for missing fields.")
+    #fill in using NA
+    dfc[,requiredfields[wfields]] <- NA
+  }
+  else{
   #Die
-  stop('Input fields missing. Check input columns: ',requiredfields[wfields] ) 
+  print("Missing fields:")
+  cat(paste(requiredfields[wfields],sep='.'))
+  stop('Required input field(s) missing.' ) 
   } 
+}
 
 
 
@@ -93,8 +106,7 @@ if( nfieldsmissing != 0){
 #Convert column names to lower case
 colnames(dfc) <- tolower(colnames(dfc))
 
-#change name column from knownGene table to "transcript"
-dfc <- plyr::rename(dfc, c("name" = "transcript") )
+
 #change var and ref column names to match expected column names with _allele
 dfc <- plyr::rename(dfc, c("var" = "var_allele", "ref" = "ref_allele") )
 
